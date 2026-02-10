@@ -6,6 +6,8 @@
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.35" />
     <PackageReference Include="Npgsql" Version="8.0.4" />
+      <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
+      <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.2" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Menu.Application/Menu.Application.csproj" />
