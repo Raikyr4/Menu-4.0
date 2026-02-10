@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earth.TEC - Comanda</title>
+
+    <link rel="stylesheet" href="../../libs/reset.css">
+    <link rel="stylesheet" href="../../libs/materialize.min.css">
+    <link rel="stylesheet" href="../../libs/google-fonts.css">
+    <link rel="stylesheet" href="css/comanda.css">
+    
+    <script src="../../libs/jquery.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+
+</head>
+<body>
+    <header>
+        <nav class="myColor">
+            <div class="nav-wrapper">
+                <div class="brand-logo right">
+                    <i class="large material-icons back">close</i>
+                </div>
+                <ul id="nav-mobile" class="myNav">
+                    <li>
+                        <div class="mylist">
+                            <i class="large material-icons">account_circle</i>
+                        </div>
+                    </li>
+                    <li>
+                        <p class="nome"></p>
+                    </li>
+                    <input type="hidden" class="tipo">
+                    <input type="hidden" class="id_tipo">
+                    <li class="atendimento_tipo"></li>
+                </ul>
+            </div>
+        </nav>
+    </header>
+    <main>
+        <div class="container">
+            <div class="parte_1">
+                <input class="search_bar" id="search-bar" type="text" placeholder="Pesquisar...">
+                <div class="table-container">
+                    <div class="categorias">
+                        <p class="caption">Categorias</p>
+                        <div class="content">
+                            <!-- Conteúdo da div de categorias -->
+                            <!-- Os produtos serão colocados dinamicamente pela função CarregaCategorias() -->
+                        </div>
+                    </div>
+
+                    <div class="produtos">
+                        <p class="caption">Produtos</p>
+                        <div class="content">
+                            <!-- Conteúdo da div de produtos -->
+                            <!-- Os produtos serão colocados dinamicamente pela função CarregaProdutos() -->
+
+                            <!-- essa div .descricao_produto é por padrão invisível, só aparece quando o usuário quer ver um produto-->
+                            <div class="descricao_produto"> 
+                                <p class="produto_nome"></p>
+                                <div class="quantidade_produto">
+                                    <button class="menos qtd">-</button>
+                                    <input type="text" class="quantia" value="1">
+                                    <button class="mais qtd">+</button>
+                                </div>
+                                <p class="total_preco" data-preco=""></p>
+                                <a class="enviar_produto">Enviar Produto<i class="material-icons">send</i></a>
+                            </div>
+
+                            
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="myLine"></div> <!-- Divisão entre as partes -->
+
+            <div class="parte_2">
+                <div class="table-container">
+                    <div class="carrinho">
+                        <p class="caption">Carrinho</p>
+                        <div class="content">
+                            <!-- Conteúdo da div de carrinho -->
+                            <!-- produtos serão inseridos dinamicamente pela função EnviaProduto() -->
+                        </div>
+                    </div>
+                    <div class="comanda">
+                        <input type="hidden" class="string_produtos">
+                        <p class="caption">Comanda</p>
+                        <!-- Conteúdo da div .comanda .content-->
+                        <!-- produtos serão inseridos dinamicamente pela função EnviaCarrinho() e/ou CarregaComanda() -->
+                        <div class="content"></div>
+                        <div class="valores"> 
+                            <p class="v_total">Total: <span>R$ 0,00</span></p>
+                            <p class="v_tx_servico">Tx. Serviço: <span>R$ 0,00</span></p>
+                            <p class="v_total_tx">Total + Tx Serviço: <span>R$ 0,00</span></p>
+                            <p class="v_pago">Pago: <span>R$ 0,00</span></p>
+                            <p class="v_resto">Restante: <span>R$ 0,00</span></p>
+                        </div>
+                        <div class="pagamento">
+                            <div class="pagamento_campos">
+                                <input type="text"class="valor_a_pagar" placeholder="R$ 0,00">
+                                <select class="browser-default">
+                                  <option value="" disabled selected>...</option>
+                                  <option value="1">CRÉDITO</option>
+                                  <option value="2">DÉBITO</option>
+                                  <option value="3">DINHEIRO</option>
+                                  <option value="4">PIX</option>
+                                </select>
+                            </div>
+                            <div class="checkboxTaxa">
+                                <input id="s1-14" type="checkbox" class="troca checkboxTaxa">
+                                <label for="s1-14">Remover taxa</label>
+                            </div>
+                            <a class="adicionar_pagamento"><i class="material-icons">add</i></a>
+
+                            <input type="hidden" class="string_pagamentos">
+                             <ul class="lista_pagamentos">
+                                <!-- Os pagamentos já existentes irão vir da função CarregaComanda() -->
+                              </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="container_botoes">
+                    <div class="botoes_carrinho">
+                        <a class="enviar_comanda">Enviar p/ Comanda<i class="material-icons">send</i></a>
+                    </div>
+                    <div class="botoes_comanda">
+                        <a class="imprimir_parcial">Imprimir Parcial</a>
+                        <a class="fechar_comanda">Fechar Comanda</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script src="js/comanda.js"></script>
+</body>
+</html>

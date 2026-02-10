@@ -1,0 +1,86 @@
+.upFont {
+    font-size: 30px;
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+    color: white;
+}
+
+.total {
+    display: inline;
+    position: absolute;
+    top: 50px;
+    left: 0;
+    width: 200px;  
+    height: 50px;  
+    background: #410961;
+    border-radius: 10px;
+    text-align: center;
+    border: 2px solid white;
+    border-radius: 5px; 
+
+}
+
+.total p {
+    font-size: 20px;
+    width: 130px;
+    height: 30px;
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+    text-align: center;
+    position: absolute;
+    top: 12px;
+    margin-left: 5px;
+}
+
+.back {
+    cursor: pointer;
+    user-select: none;
+
+}
+
+.see {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    margin-right: 15px;
+    background: #7817b1;
+    border-radius: 8px;
+    user-select: none;
+}
+
+.Mesas , .ti{
+     margin-left: 84%;
+}
+
+.titulo {
+    font-size: 25px;
+    color: #ffffff;
+    text-align: center;
+    margin-bottom: 20px;
+    display: inline;
+    position: absolute;
+    margin-top: 10px;
+    top: 10px;
+    left: 0;
+}
+
+.botoesOcupado {
+    width: 200px;
+    margin: 10px;
+    padding: auto;
+    height: 100px;
+    background: #09610f;
+    border-radius: 20px;
+    color: white;
+    box-shadow: white;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: transform 0.1s ease;
+}
+
+.botoesOcupado:hover {
+    background: #09613e;
+}
+
