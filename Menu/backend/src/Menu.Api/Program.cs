@@ -19,6 +19,8 @@ builder.Services.AddOptions<DatabaseOptions>()
     .ValidateOnStart();
 
 builder.Services.AddScoped<IComandaRepository, DapperComandaRepository>();
+builder.Services.AddScoped<ILegacyRepository, DapperLegacyRepository>();
+builder.Services.AddScoped<IAuthRepository, DapperAuthRepository>();
 builder.Services.AddScoped<AdicionarItemComandaUseCase>();
 builder.Services.AddScoped<IValidator<AdicionarItemRequest>, AdicionarItemRequestValidator>();
 
