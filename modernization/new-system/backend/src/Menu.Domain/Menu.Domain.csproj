@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Menu.Domain</AssemblyName>
+    <RootNamespace>Menu.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>
