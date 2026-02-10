@@ -35,6 +35,12 @@ Nova implementação com:
 Também mantido endpoint novo:
 - `POST /api/comandas/{tipo}/{atendimentoId}/itens`
 
+
+## Compatibilidade de Node
+
+- Frontend ajustado para funcionar em **Node 14.21.3** (sem exigir upgrade).
+- Versões de Vite/React Router/React Query foram fixadas em faixas compatíveis com Node 14.
+
 ## Como iniciar o front-end
 
 ```bash
