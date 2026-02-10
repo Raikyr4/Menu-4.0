@@ -16,7 +16,7 @@ public sealed class ComandasController(AdicionarItemComandaUseCase useCase, IVal
         var validation = await validator.ValidateAsync(request, ct);
         if (!validation.IsValid)
         {
-            return ValidationProblem(validation.ToDictionary());
+            return BadRequest(new ValidationProblemDetails(validation.ToDictionary()));
         }
 
         var atendimentoTipo = tipo.ToLowerInvariant() switch
