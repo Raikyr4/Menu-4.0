@@ -18,6 +18,40 @@ Implementação inicial do projeto modernizado com:
   - Fluxo simples de adicionar item em mesa via API
   - React Query para loading/error/refetch
 
+## Como iniciar o front-end (passo a passo)
+
+Sim — você precisa instalar dependências com **npm**.
+
+1. Entrar na pasta do front:
+
+```bash
+cd Menu/frontend
+```
+
+2. Instalar as dependências (primeira vez ou quando mudar `package.json`):
+
+```bash
+npm install
+```
+
+3. Subir em modo desenvolvimento:
+
+```bash
+npm run dev
+```
+
+4. Abrir no navegador:
+
+- URL padrão do Vite: `http://localhost:5173`
+
+### Scripts úteis do front
+
+```bash
+npm run test
+npm run build
+npm run preview
+```
+
 ## Endpoint implementado
 
 `POST /api/comandas/{tipo}/{atendimentoId}/itens`
