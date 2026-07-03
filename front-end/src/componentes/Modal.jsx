@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { X } from 'lucide-react';
 
 /** Modal padrão do sistema: fecha no X, clicando fora ou com Esc. */
-export default function Modal({ titulo, aberto, aoFechar, children }) {
+export default function Modal({ titulo, aberto, aoFechar, children, largo = false }) {
   useEffect(() => {
     if (!aberto) return;
     const aoTeclar = (evento) => evento.key === 'Escape' && aoFechar();
@@ -18,7 +18,7 @@ export default function Modal({ titulo, aberto, aoFechar, children }) {
 
   return (
     <div className="sobreposicao-modal" onClick={aoFechar}>
-      <div className="cartao modal" onClick={(evento) => evento.stopPropagation()}>
+      <div className={`cartao modal ${largo ? 'modal-largo' : ''}`} onClick={(evento) => evento.stopPropagation()}>
         <div className="modal-cabecalho">
           <h3>{titulo}</h3>
           <button className="botao-icone" title="Fechar" onClick={aoFechar}>

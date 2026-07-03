@@ -4,6 +4,7 @@ import { ArrowLeft, Search, X } from 'lucide-react';
 import Cabecalho from '../componentes/Cabecalho.jsx';
 import CampoDinheiro from '../componentes/CampoDinheiro.jsx';
 import Carregando from '../componentes/Carregando.jsx';
+import ConfigurarProdutoModal from '../componentes/ConfigurarProdutoModal.jsx';
 import IconeProduto from '../componentes/IconeProduto.jsx';
 import Modal from '../componentes/Modal.jsx';
 import { api, formatarReal } from '../servicos/api.js';
@@ -17,6 +18,16 @@ const FORMAS_PAGAMENTO = [
 
 const ROTULO_AJUSTE = { DESCONTO: 'Desconto', SANGRIA: 'Sangria' };
 
+function rotuloPreco(produto) {
+  if (Number(produto.valorKg) > 0) return `${formatarReal(produto.valorKg)}/kg`;
+  if (Number(produto.preco) > 0) return formatarReal(produto.preco);
+  const valores = (produto.gruposOpcoes ?? [])
+    .flatMap((grupo) => grupo.opcoes)
+    .map((opcao) => Number(opcao.precoAdicional))
+    .filter((valor) => valor > 0);
+  return valores.length ? `A partir de ${formatarReal(Math.min(...valores))}` : formatarReal(0);
+}
+
 export default function Comanda() {
   const { id } = useParams();
   const navegar = useNavigate();
@@ -28,6 +39,7 @@ export default function Comanda() {
 
   const [busca, setBusca] = useState('');
   const [categoriaAtiva, setCategoriaAtiva] = useState(null);
+  const [produtoConfigurando, setProdutoConfigurando] = useState(null);
 
   const [formaPagamento, setFormaPagamento] = useState('DINHEIRO');
   const [valorPagamento, setValorPagamento] = useState(null);
@@ -82,8 +94,26 @@ export default function Comanda() {
     }
   }
 
-  const adicionarProduto = (produto) =>
-    executar(() => api.post(`/api/comandas/${id}/itens`, { produtoId: produto.id, quantidade: 1 }));
+  function adicionarProduto(produto) {
+    if (Number(produto.valorKg) > 0 || produto.gruposOpcoes?.length > 0) {
+      setProdutoConfigurando(produto);
+      return;
+    }
+    executar(() => api.post(`/api/comandas/${id}/itens`, {
+      produtoId: produto.id,
+      quantidade: 1,
+      opcaoIds: [],
+    }));
+  }
+
+  async function adicionarProdutoConfigurado(configuracao) {
+    const atualizada = await api.post(`/api/comandas/${id}/itens`, {
+      produtoId: produtoConfigurando.id,
+      ...configuracao,
+    });
+    setComanda(atualizada);
+    setProdutoConfigurando(null);
+  }
 
   const removerItem = (itemId) =>
     executar(() => api.delete(`/api/comandas/${id}/itens/${itemId}`));
@@ -146,20 +176,25 @@ export default function Comanda() {
       return atualizada;
     });
 
-  // Agrupa itens iguais para exibição (mesmo produto e mesmo preço)
+  // Agrupa unidades quando produto, preço e opções são iguais. Pesagens ficam separadas.
   const itensAgrupados = useMemo(() => {
     if (!comanda) return [];
     const grupos = new Map();
     for (const item of comanda.itens) {
-      const chave = `${item.produtoId}|${item.precoUnitario}`;
+      const assinaturaOpcoes = (item.opcoes ?? []).map((opcao) => opcao.nomeOpcao).join('|');
+      const chave = item.unidade === 'KG'
+        ? `peso-${item.id}`
+        : `${item.produtoId}|${item.precoUnitario}|${assinaturaOpcoes}`;
       const grupo = grupos.get(chave) ?? {
         chave,
         produtoNome: item.produtoNome,
         precoUnitario: item.precoUnitario,
         quantidade: 0,
+        unidade: item.unidade,
+        opcoes: item.opcoes ?? [],
         idsItens: [],
       };
-      grupo.quantidade += item.quantidade;
+      grupo.quantidade += Number(item.quantidade);
       grupo.idsItens.push(item.id);
       grupos.set(chave, grupo);
     }
@@ -246,7 +281,7 @@ export default function Comanda() {
                       nomeCategoria={nomeDaCategoria.get(produto.categoriaId)}
                     />
                     <span className="nome">{produto.nome}</span>
-                    <span className="preco">{formatarReal(produto.preco)}</span>
+                    <span className="preco">{rotuloPreco(produto)}</span>
                   </div>
                 ))}
                 {produtosVisiveis.length === 0 && (
@@ -272,15 +307,24 @@ export default function Comanda() {
                 <div className="lista-itens">
                   {itensAgrupados.map((grupo) => (
                     <div className="item-comanda" key={grupo.chave}>
-                      <span className="qtd">{grupo.quantidade}x</span>
-                      <span className="nome">{grupo.produtoNome}</span>
+                      <span className="qtd">
+                        {grupo.unidade === 'KG'
+                          ? `${Math.round(grupo.quantidade * 1000).toLocaleString('pt-BR')} g`
+                          : `${grupo.quantidade}x`}
+                      </span>
+                      <span className="nome">
+                        {grupo.produtoNome}
+                        {grupo.opcoes.length > 0 && (
+                          <small>{grupo.opcoes.map((opcao) => opcao.nomeOpcao).join(' · ')}</small>
+                        )}
+                      </span>
                       <span className="valor">
                         {formatarReal(grupo.quantidade * grupo.precoUnitario)}
                       </span>
                       {!fechada && (
                         <button
                           className="botao-remover"
-                          title="Remover uma unidade"
+                          title={grupo.unidade === 'KG' ? 'Remover pesagem' : 'Remover uma unidade'}
                           onClick={() => removerItem(grupo.idsItens[grupo.idsItens.length - 1])}
                         >
                           <X size={15} />
@@ -434,6 +478,12 @@ export default function Comanda() {
             </aside>
           </div>
         )}
+
+        <ConfigurarProdutoModal
+          produto={produtoConfigurando}
+          aoFechar={() => setProdutoConfigurando(null)}
+          aoConfirmar={adicionarProdutoConfigurado}
+        />
 
         {/* Modal de desconto/sangria */}
         <Modal

@@ -37,6 +37,28 @@ CREATE TABLE produto (
     ativo         BOOLEAN       NOT NULL DEFAULT TRUE
 );
 
+-- Grupos configuraveis (Tamanho, Molho, Recheio...) e suas opcoes.
+CREATE TABLE produto_opcao_grupo (
+    id                 SERIAL PRIMARY KEY,
+    produto_id         INT          NOT NULL REFERENCES produto(id) ON DELETE CASCADE,
+    nome               VARCHAR(100) NOT NULL,
+    obrigatorio        BOOLEAN      NOT NULL DEFAULT FALSE,
+    selecao_multipla   BOOLEAN      NOT NULL DEFAULT FALSE,
+    ordem              INT          NOT NULL DEFAULT 0
+);
+
+CREATE TABLE produto_opcao (
+    id                SERIAL PRIMARY KEY,
+    grupo_id          INT           NOT NULL REFERENCES produto_opcao_grupo(id) ON DELETE CASCADE,
+    nome              VARCHAR(150)  NOT NULL,
+    preco_adicional   NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (preco_adicional >= 0),
+    ordem             INT           NOT NULL DEFAULT 0,
+    ativo             BOOLEAN       NOT NULL DEFAULT TRUE
+);
+
+CREATE INDEX ix_produto_opcao_grupo_produto ON produto_opcao_grupo (produto_id);
+CREATE INDEX ix_produto_opcao_grupo ON produto_opcao (grupo_id);
+
 -- Cadastro fixo das mesas físicas do salão
 CREATE TABLE mesa (
     numero INT PRIMARY KEY,
@@ -68,12 +90,24 @@ CREATE TABLE comanda_item (
     id              SERIAL PRIMARY KEY,
     comanda_id      INT           NOT NULL REFERENCES comanda(id) ON DELETE CASCADE,
     produto_id      INT           NOT NULL REFERENCES produto(id),
-    quantidade      INT           NOT NULL DEFAULT 1 CHECK (quantidade > 0),
+    quantidade      NUMERIC(10,3) NOT NULL DEFAULT 1 CHECK (quantidade > 0),
+    unidade         VARCHAR(5)    NOT NULL DEFAULT 'UN' CHECK (unidade IN ('UN', 'KG')),
     -- preço congelado no momento do lançamento (mudança de tabela de preço não altera comanda)
     preco_unitario  NUMERIC(10,2) NOT NULL
 );
 
 CREATE INDEX ix_comanda_item_comanda ON comanda_item (comanda_id);
+
+-- Snapshot das opcoes: mudancas futuras no cardapio nao alteram vendas antigas.
+CREATE TABLE comanda_item_opcao (
+    id                SERIAL PRIMARY KEY,
+    comanda_item_id   INT           NOT NULL REFERENCES comanda_item(id) ON DELETE CASCADE,
+    nome_grupo        VARCHAR(100)  NOT NULL,
+    nome_opcao        VARCHAR(150)  NOT NULL,
+    preco_adicional  NUMERIC(10,2) NOT NULL DEFAULT 0
+);
+
+CREATE INDEX ix_comanda_item_opcao_item ON comanda_item_opcao (comanda_item_id);
 
 CREATE TABLE pagamento (
     id          SERIAL PRIMARY KEY,

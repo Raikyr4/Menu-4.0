@@ -51,7 +51,7 @@ public class CatalogoServico(CatalogoRepositorio catalogo)
         await ValidarProduto(requisicao);
         var id = await catalogo.InserirProduto(
             requisicao.Nome.Trim(), requisicao.CategoriaId, requisicao.Preco,
-            requisicao.ValorKg, requisicao.Especial);
+            requisicao.ValorKg, requisicao.Especial, requisicao.GruposOpcoes ?? []);
         return (await catalogo.BuscarProduto(id))!;
     }
 
@@ -63,7 +63,7 @@ public class CatalogoServico(CatalogoRepositorio catalogo)
         await ValidarProduto(requisicao);
         await catalogo.AtualizarProduto(
             id, requisicao.Nome.Trim(), requisicao.CategoriaId, requisicao.Preco,
-            requisicao.ValorKg, requisicao.Especial);
+            requisicao.ValorKg, requisicao.Especial, requisicao.GruposOpcoes ?? []);
         return (await catalogo.BuscarProduto(id))!;
     }
 
@@ -84,9 +84,31 @@ public class CatalogoServico(CatalogoRepositorio catalogo)
         _ = await catalogo.BuscarCategoria(requisicao.CategoriaId)
             ?? throw new RegraDeNegocioException("Categoria não encontrada.");
 
-        // Produto por peso pode ter preço 0 (o valor vem do kg); produto comum precisa de preço
-        if (requisicao.Preco <= 0 && requisicao.ValorKg <= 0)
+        var grupos = requisicao.GruposOpcoes ?? [];
+        foreach (var grupo in grupos)
+        {
+            if (string.IsNullOrWhiteSpace(grupo.Nome))
+                throw new RegraDeNegocioException("Todos os grupos precisam de nome.");
+            if (grupo.Opcoes is null || grupo.Opcoes.Count == 0)
+                throw new RegraDeNegocioException($"O grupo '{grupo.Nome}' precisa ter ao menos uma opção.");
+            if (grupo.Opcoes.Any(o => string.IsNullOrWhiteSpace(o.Nome)))
+                throw new RegraDeNegocioException($"Todas as opções de '{grupo.Nome}' precisam de nome.");
+            if (grupo.Opcoes.GroupBy(o => o.Nome.Trim(), StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
+                throw new RegraDeNegocioException($"O grupo '{grupo.Nome}' possui opções repetidas.");
+        }
+
+        if (grupos.GroupBy(g => g.Nome.Trim(), StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
+            throw new RegraDeNegocioException("O produto possui grupos de opções repetidos.");
+
+        if (requisicao.Preco > 0 && requisicao.ValorKg > 0)
+            throw new RegraDeNegocioException("Escolha venda por unidade ou por peso, não as duas.");
+        if (requisicao.ValorKg > 0 && grupos.Count > 0)
+            throw new RegraDeNegocioException("Produtos vendidos por peso não podem ter grupos de opções.");
+
+        // Produto por peso usa valor/kg; produto configurável pode ter preço nas opções.
+        if (requisicao.Preco <= 0 && requisicao.ValorKg <= 0
+            && !grupos.SelectMany(g => g.Opcoes).Any(o => o.PrecoAdicional > 0))
             throw new RegraDeNegocioException(
-                "Informe o preço do produto (ou o valor por kg, se for vendido por peso).");
+                "Informe o preço base, o valor por kg ou o valor de alguma opção.");
     }
 }

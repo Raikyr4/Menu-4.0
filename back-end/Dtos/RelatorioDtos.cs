@@ -19,7 +19,7 @@ public class ProdutoMaisVendidoResposta
 {
     public string Nome { get; set; } = string.Empty;
     public string Categoria { get; set; } = string.Empty;
-    public long Quantidade { get; set; }
+    public decimal Quantidade { get; set; }
     public decimal Total { get; set; }
 }
 

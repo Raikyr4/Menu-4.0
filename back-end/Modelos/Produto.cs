@@ -9,4 +9,5 @@ public class Produto
     public decimal Preco { get; set; }
     public decimal ValorKg { get; set; }
     public bool Ativo { get; set; }
+    public List<ProdutoOpcaoGrupo> GruposOpcoes { get; set; } = [];
 }

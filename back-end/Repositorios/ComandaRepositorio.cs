@@ -58,13 +58,24 @@ public class ComandaRepositorio(FabricaConexao fabrica)
     public async Task<IEnumerable<ComandaItem>> ListarItens(int comandaId)
     {
         await using var conexao = fabrica.CriarConexao();
-        return await conexao.QueryAsync<ComandaItem>(
+        var itens = (await conexao.QueryAsync<ComandaItem>(
             @"SELECT ci.*, p.nome AS produto_nome
               FROM comanda_item ci
               JOIN produto p ON p.id = ci.produto_id
               WHERE ci.comanda_id = @comandaId
               ORDER BY ci.id",
-            new { comandaId });
+            new { comandaId })).ToList();
+        if (itens.Count == 0) return itens;
+
+        var ids = itens.Select(i => i.Id).ToArray();
+        var opcoes = await conexao.QueryAsync<ComandaItemOpcao>(
+            @"SELECT * FROM comanda_item_opcao
+              WHERE comanda_item_id = ANY(@ids)
+              ORDER BY id", new { ids });
+        var itemPorId = itens.ToDictionary(i => i.Id);
+        foreach (var opcao in opcoes)
+            itemPorId[opcao.ComandaItemId].Opcoes.Add(opcao);
+        return itens;
     }
 
     public async Task<IEnumerable<Pagamento>> ListarPagamentos(int comandaId)
@@ -75,14 +86,34 @@ public class ComandaRepositorio(FabricaConexao fabrica)
             new { comandaId });
     }
 
-    public async Task<int> InserirItem(int comandaId, int produtoId, int quantidade, decimal precoUnitario)
+    public async Task<int> InserirItem(
+        int comandaId, int produtoId, decimal quantidade, string unidade,
+        decimal precoUnitario, IReadOnlyCollection<ComandaItemOpcao> opcoes)
     {
         await using var conexao = fabrica.CriarConexao();
-        return await conexao.ExecuteScalarAsync<int>(
-            @"INSERT INTO comanda_item (comanda_id, produto_id, quantidade, preco_unitario)
-              VALUES (@comandaId, @produtoId, @quantidade, @precoUnitario)
+        await conexao.OpenAsync();
+        await using var transacao = await conexao.BeginTransactionAsync();
+        var itemId = await conexao.ExecuteScalarAsync<int>(
+            @"INSERT INTO comanda_item (comanda_id, produto_id, quantidade, unidade, preco_unitario)
+              VALUES (@comandaId, @produtoId, @quantidade, @unidade, @precoUnitario)
               RETURNING id",
-            new { comandaId, produtoId, quantidade, precoUnitario });
+            new { comandaId, produtoId, quantidade, unidade, precoUnitario }, transacao);
+        foreach (var opcao in opcoes)
+        {
+            await conexao.ExecuteAsync(
+                @"INSERT INTO comanda_item_opcao
+                    (comanda_item_id, nome_grupo, nome_opcao, preco_adicional)
+                  VALUES (@itemId, @nomeGrupo, @nomeOpcao, @precoAdicional)",
+                new
+                {
+                    itemId,
+                    opcao.NomeGrupo,
+                    opcao.NomeOpcao,
+                    opcao.PrecoAdicional
+                }, transacao);
+        }
+        await transacao.CommitAsync();
+        return itemId;
     }
 
     public async Task<int> RemoverItem(int comandaId, int itemId)

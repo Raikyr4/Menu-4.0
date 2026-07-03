@@ -5,7 +5,8 @@ namespace MenuRestaurante.Api.Dtos;
 
 public record NovoItemRequisicao(
     [Range(1, int.MaxValue, ErrorMessage = "Produto inválido")] int ProdutoId,
-    [Range(1, 999, ErrorMessage = "Quantidade deve ser entre 1 e 999")] int Quantidade);
+    decimal Quantidade,
+    List<int>? OpcaoIds);
 
 public record NovoPagamentoRequisicao(
     [Required(ErrorMessage = "Informe a forma de pagamento")] string Forma,

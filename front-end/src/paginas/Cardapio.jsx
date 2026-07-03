@@ -4,11 +4,24 @@ import { ArrowLeft, Check, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import Cabecalho from '../componentes/Cabecalho.jsx';
 import CampoDinheiro from '../componentes/CampoDinheiro.jsx';
 import Carregando from '../componentes/Carregando.jsx';
+import EditorOpcoesProduto, { prepararGruposParaEdicao } from '../componentes/EditorOpcoesProduto.jsx';
 import IconeProduto from '../componentes/IconeProduto.jsx';
 import Modal from '../componentes/Modal.jsx';
 import { api, formatarReal } from '../servicos/api.js';
 
-const PRODUTO_VAZIO = { nome: '', categoriaId: '', preco: null, valorKg: null, especial: false };
+const PRODUTO_VAZIO = {
+  nome: '', categoriaId: '', tipoVenda: 'UN', preco: null, valorKg: null, especial: false, gruposOpcoes: [],
+};
+
+function rotuloPreco(produto) {
+  if (Number(produto.valorKg) > 0) return `${formatarReal(produto.valorKg)}/kg`;
+  if (Number(produto.preco) > 0) return formatarReal(produto.preco);
+  const valores = (produto.gruposOpcoes ?? [])
+    .flatMap((grupo) => grupo.opcoes)
+    .map((opcao) => Number(opcao.precoAdicional))
+    .filter((valor) => valor > 0);
+  return valores.length ? `A partir de ${formatarReal(Math.min(...valores))}` : formatarReal(0);
+}
 
 export default function Cardapio() {
   const navegar = useNavigate();
@@ -101,9 +114,11 @@ export default function Cardapio() {
       id: produto.id,
       nome: produto.nome,
       categoriaId: String(produto.categoriaId),
+      tipoVenda: produto.valorKg > 0 ? 'KG' : 'UN',
       preco: produto.preco > 0 ? produto.preco : null,
       valorKg: produto.valorKg > 0 ? produto.valorKg : null,
       especial: produto.especial,
+      gruposOpcoes: prepararGruposParaEdicao(produto.gruposOpcoes),
     });
   }
 
@@ -115,6 +130,15 @@ export default function Cardapio() {
       preco: formProduto.preco ?? 0,
       valorKg: formProduto.valorKg ?? 0,
       especial: formProduto.especial,
+      gruposOpcoes: formProduto.gruposOpcoes.map((grupo) => ({
+        nome: grupo.nome,
+        obrigatorio: grupo.obrigatorio,
+        selecaoMultipla: grupo.selecaoMultipla,
+        opcoes: grupo.opcoes.map((opcao) => ({
+          nome: opcao.nome,
+          precoAdicional: opcao.precoAdicional ?? 0,
+        })),
+      })),
     };
     setErroModal('');
     try {
@@ -258,10 +282,11 @@ export default function Cardapio() {
                       <span className="detalhe">
                         {nomeDaCategoria.get(produto.categoriaId)}
                         {produto.valorKg > 0 && ` · ${formatarReal(produto.valorKg)}/kg`}
+                        {produto.gruposOpcoes?.length > 0 && ` · ${produto.gruposOpcoes.length} grupo(s) de opções`}
                         {produto.especial && ' · Especial'}
                       </span>
                     </div>
-                    <span className="preco">{formatarReal(produto.preco)}</span>
+                    <span className="preco">{rotuloPreco(produto)}</span>
                     <button className="botao-icone" title="Editar" onClick={() => editarProduto(produto)}>
                       <Pencil size={15} />
                     </button>
@@ -283,6 +308,7 @@ export default function Cardapio() {
           titulo={formProduto?.id ? 'Editar produto' : 'Novo produto'}
           aberto={Boolean(formProduto)}
           aoFechar={() => setFormProduto(null)}
+          largo
         >
           {formProduto && (
             <form onSubmit={salvarProduto}>
@@ -315,25 +341,53 @@ export default function Cardapio() {
                 </select>
               </div>
 
-              <div className="grade-form">
-                <div className="campo">
-                  <label htmlFor="produto-preco">Preço (R$)</label>
-                  <CampoDinheiro
-                    id="produto-preco"
-                    valor={formProduto.preco}
-                    aoMudar={(valor) => setFormProduto({ ...formProduto, preco: valor })}
-                  />
-                </div>
-                <div className="campo">
-                  <label htmlFor="produto-kg">Valor por kg (R$)</label>
-                  <CampoDinheiro
-                    id="produto-kg"
-                    valor={formProduto.valorKg}
-                    aoMudar={(valor) => setFormProduto({ ...formProduto, valorKg: valor })}
-                  />
-                </div>
+              <div className="campo">
+                <label htmlFor="produto-tipo-venda">Forma de venda</label>
+                <select
+                  id="produto-tipo-venda"
+                  value={formProduto.tipoVenda}
+                  onChange={(e) => {
+                    const tipoVenda = e.target.value;
+                    setFormProduto({
+                      ...formProduto,
+                      tipoVenda,
+                      preco: tipoVenda === 'KG' ? null : formProduto.preco,
+                      valorKg: tipoVenda === 'UN' ? null : formProduto.valorKg,
+                      gruposOpcoes: tipoVenda === 'KG' ? [] : formProduto.gruposOpcoes,
+                    });
+                  }}
+                >
+                  <option value="UN">Por unidade</option>
+                  <option value="KG">Por peso</option>
+                </select>
               </div>
-              <p className="dica-campo">Preencha o valor por kg apenas para produtos vendidos por peso.</p>
+
+              <div className="grade-form">
+                {formProduto.tipoVenda === 'UN' ? (
+                  <div className="campo">
+                    <label htmlFor="produto-preco">Preço base (R$)</label>
+                    <CampoDinheiro
+                      id="produto-preco"
+                      valor={formProduto.preco}
+                      aoMudar={(valor) => setFormProduto({ ...formProduto, preco: valor })}
+                    />
+                  </div>
+                ) : (
+                  <div className="campo">
+                    <label htmlFor="produto-kg">Valor por kg (R$)</label>
+                    <CampoDinheiro
+                      id="produto-kg"
+                      valor={formProduto.valorKg}
+                      aoMudar={(valor) => setFormProduto({ ...formProduto, valorKg: valor })}
+                    />
+                  </div>
+                )}
+              </div>
+              <p className="dica-campo">
+                {formProduto.tipoVenda === 'KG'
+                  ? 'Na comanda, o atendente informará o peso e verá o total antes de adicionar.'
+                  : 'O preço base pode ser zero quando o valor completo estiver nas opções.'}
+              </p>
 
               <label className="opcao-taxa">
                 <input
@@ -343,6 +397,13 @@ export default function Cardapio() {
                 />
                 Produto especial (destaque do cardápio)
               </label>
+
+              {formProduto.tipoVenda === 'UN' && (
+                <EditorOpcoesProduto
+                  grupos={formProduto.gruposOpcoes}
+                  aoMudar={(gruposOpcoes) => setFormProduto({ ...formProduto, gruposOpcoes })}
+                />
+              )}
 
               <div className="acoes-form">
                 <button className="botao botao-primario" type="submit">

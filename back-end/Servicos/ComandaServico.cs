@@ -47,11 +47,51 @@ public class ComandaServico(
     {
         var comanda = await BuscarAbertaOuFalhar(comandaId);
 
+        if (requisicao.Quantidade < 0.001m || requisicao.Quantidade > 999.999m)
+            throw new RegraDeNegocioException("Quantidade deve ser entre 0,001 e 999,999.");
+
         var produto = await catalogo.BuscarProduto(requisicao.ProdutoId)
             ?? throw new RegraDeNegocioException("Produto não encontrado.");
 
-        // Preço congelado no momento do lançamento
-        await comandas.InserirItem(comanda.Id, produto.Id, requisicao.Quantidade, produto.Preco);
+        var idsSelecionados = (requisicao.OpcaoIds ?? []).Distinct().ToHashSet();
+        var idsConhecidos = produto.GruposOpcoes
+            .SelectMany(g => g.Opcoes)
+            .Select(o => o.Id)
+            .ToHashSet();
+        if (idsSelecionados.Any(id => !idsConhecidos.Contains(id)))
+            throw new RegraDeNegocioException("Uma das opções selecionadas não pertence ao produto.");
+
+        var opcoes = new List<ComandaItemOpcao>();
+        foreach (var grupo in produto.GruposOpcoes)
+        {
+            var selecionadas = grupo.Opcoes.Where(o => idsSelecionados.Contains(o.Id)).ToList();
+            if (grupo.Obrigatorio && selecionadas.Count == 0)
+                throw new RegraDeNegocioException($"Escolha uma opção em '{grupo.Nome}'.");
+            if (!grupo.SelecaoMultipla && selecionadas.Count > 1)
+                throw new RegraDeNegocioException($"Escolha apenas uma opção em '{grupo.Nome}'.");
+
+            opcoes.AddRange(selecionadas.Select(opcao => new ComandaItemOpcao
+            {
+                NomeGrupo = grupo.Nome,
+                NomeOpcao = opcao.Nome,
+                PrecoAdicional = opcao.PrecoAdicional
+            }));
+        }
+
+        var vendidoPorPeso = produto.ValorKg > 0;
+        if (!vendidoPorPeso && requisicao.Quantidade != decimal.Truncate(requisicao.Quantidade))
+            throw new RegraDeNegocioException("Produtos por unidade precisam de quantidade inteira.");
+
+        var precoUnitario = vendidoPorPeso
+            ? produto.ValorKg
+            : produto.Preco + opcoes.Sum(o => o.PrecoAdicional);
+        if (precoUnitario <= 0)
+            throw new RegraDeNegocioException("A configuração escolhida precisa ter valor maior que zero.");
+
+        // Preço, unidade e nomes das opções ficam congelados no momento do lançamento.
+        await comandas.InserirItem(
+            comanda.Id, produto.Id, requisicao.Quantidade,
+            vendidoPorPeso ? "KG" : "UN", precoUnitario, opcoes);
         return await MontarDetalhe(comandaId);
     }
 
