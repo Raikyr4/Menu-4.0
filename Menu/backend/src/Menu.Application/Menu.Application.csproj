@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Menu.Application</AssemblyName>
+    <RootNamespace>Menu.Application</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Menu.Domain/Menu.Domain.csproj" />
+  </ItemGroup>
+</Project>
