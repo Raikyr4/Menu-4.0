@@ -1,5 +1,5 @@
 using System.Text;
-using Dapper;
+using MenuRestaurante.Api.Modelos;
 using MenuRestaurante.Api.Repositorios;
 using MenuRestaurante.Api.Servicos;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -8,7 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 var builder = WebApplication.CreateBuilder(args);
 
 // Colunas snake_case do Postgres -> propriedades PascalCase dos modelos
-DefaultTypeMap.MatchNamesWithUnderscores = true;
+MapeamentoDapper.Configurar();
 
 // Configuração obrigatória é conferida aqui, antes de qualquer serviço subir.
 // Sem isso a falta de uma chave só aparecia como NullReferenceException no meio do start.
@@ -31,6 +31,9 @@ builder.Services.AddScoped<RelatorioRepositorio>();
 builder.Services.AddScoped<TokenServico>();
 builder.Services.AddScoped<ComandaServico>();
 builder.Services.AddScoped<CatalogoServico>();
+builder.Services.AddScoped<UsuarioServico>();
+
+builder.Services.AddRateLimiter(LimitesDeRequisicao.Configurar);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opcoes =>
@@ -43,7 +46,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Emissor"],
             ValidAudience = builder.Configuration["Jwt:Publico"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(chaveJwt))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(chaveJwt)),
+            // Sem isto, [Authorize(Roles = "DONO")] procura a claim de papel do esquema da
+            // Microsoft e não acha a nossa — todo mundo viraria 403.
+            RoleClaimType = PapelUsuario.TipoDeClaim
         };
     });
 builder.Services.AddAuthorization();
@@ -92,6 +98,7 @@ app.Use(async (contexto, proximo) =>
 });
 
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

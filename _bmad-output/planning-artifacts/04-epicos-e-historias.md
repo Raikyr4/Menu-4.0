@@ -14,8 +14,8 @@ todo. Cada fase entrega algo utilizável — nenhuma fase é só preparação in
 
 | Fase | Épico | Entrega para os seus pais | Esforço |
 |---|---|---|---|
-| 0 | E1 — Rede de proteção | Nada visível. Sem isso, o resto é construído no escuro | ~1 semana |
-| 1 | E2 — Papéis e acesso | Garçom não vê faturamento | ~4 dias |
+| 0 | E1 — Rede de proteção | ✅ **entregue** — nada visível, mas o resto deixa de ser no escuro | ~1 semana |
+| 1 | E2 — Papéis e acesso | ✅ **entregue** — garçom não vê faturamento | ~4 dias |
 | 2 | E3 — Cadastro de insumos e compras | "Quanto tenho de refrigerante e quanto custou" | ~1 semana |
 | 2 | E4 — Ficha técnica e baixa automática | Estoque desce sozinho ao fechar a comanda | ~1,5 semana |
 | 2 | E5 — Inventário, alertas e lista de compras | "O que preciso comprar hoje" | ~1 semana |
@@ -33,23 +33,32 @@ todo. Cada fase entrega algo utilizável — nenhuma fase é só preparação in
 > Corrige C-2, C-3, A-1, A-4, M-6. Nada aqui aparece na tela. Tudo aqui evita que os dois
 > módulos novos sejam construídos sobre areia.
 
-**Status em 2026-08-11 — 6 de 7 entregues.**
+**Status em 2026-08-11 — 7 de 7 entregues. Épico fechado.**
 
 | História | Situação |
 |---|---|
 | E1-01 `appsettings.example.json` | ✅ feito |
 | E1-02 Testes do cálculo | ✅ feito — 20 testes, `dotnet test` verde |
-| E1-03 Fuso horário | ✅ feito |
-| E1-04 Migrations (DbUp) | ✅ feito |
-| E1-05 Índices | ✅ feito (`002_indices_relatorios.sql`) |
-| E1-06 Corridas | ⬜ **pendente** — ver nota abaixo |
+| E1-03 Fuso horário | ✅ feito — com teste contra Postgres em UTC |
+| E1-04 Migrations (DbUp) | ✅ feito — validado em banco vazio, duas passadas e banco de legado |
+| E1-05 Índices | ✅ feito (`002_indices_relatorios.sql`), com teste que confere a existência |
+| E1-06 Corridas | ✅ feito — `EscopoTransacao` + `SELECT ... FOR UPDATE`, 5 testes de integração |
 | E1-07 Log estruturado | ✅ feito (`ILogger`; Serilog fica para quando houver arquivo/rotação) |
 
-> **Por que E1-06 ficou de fora desta leva:** corrigir a corrida exige mudar o ciclo de vida da
-> conexão — hoje cada método de `ComandaRepositorio` abre a sua. Segurar o `SELECT ... FOR UPDATE`
-> da validação até a escrita significa uma transação atravessando serviço e repositório. É um
-> refactor que precisa de um Postgres de verdade para ser verificado (dois clientes concorrentes),
-> e não havia banco disponível no ambiente onde o resto foi feito. É o próximo item.
+> **Como E1-06 foi resolvido:** `Repositorios/EscopoTransacao.cs` carrega a conexão e a transação
+> abertas; os métodos de `ComandaRepositorio` que participam recebem `EscopoTransacao? escopo = null`
+> e um helper decide entre usar o escopo ou abrir conexão própria. `AdicionarPagamento`,
+> `AdicionarAjuste` e `Fechar` abrem o escopo, travam a comanda e só então validam e gravam.
+>
+> Os testes não disparam duas chamadas em paralelo torcendo para se cruzarem — isso passa por
+> sorte. O concorrente é uma transação que o próprio teste abre e segura; o teste verifica que o
+> serviço **espera** por ela. Com o `FOR UPDATE` removido, os três ficam vermelhos (verificado).
+>
+> **Bug encontrado ao escrever esses testes:** `DefaultTypeMap.MatchNamesWithUnderscores = true`
+> vivia dentro do `Program.cs`, que não roda em teste. Toda leitura de coluna com underline
+> devolvia zero, silenciosamente — o total da comanda dava R$ 0,00 e a falha parecia regra de
+> negócio. Extraído para `Repositorios/MapeamentoDapper.cs`, chamado pelo `Program.cs` e por um
+> `[ModuleInitializer]` no projeto de testes.
 
 **Bônus não planejado, encontrado ao escrever os testes:** o arredondamento da taxa divergia entre
 C# (`Math.Round` = bancário) e Postgres (`ROUND` = meio para cima). Consumo de R$ 10,05 mostrava
@@ -101,11 +110,13 @@ fechadas podem exibir R$ 0,01 de restante — cosmético no histórico, correto 
 
 ### E1-06 — Corrigir as corridas conhecidas
 **Critérios de aceite**
-- [ ] `AdicionarPagamento` valida e insere na mesma transação com `SELECT ... FOR UPDATE` na
+- [x] `AdicionarPagamento` valida e insere na mesma transação com `SELECT ... FOR UPDATE` na
       comanda — dois pagamentos simultâneos não ultrapassam o restante (A-2).
-- [ ] `AbrirOuObterComandaMesa` trata violação de unicidade (`23505`) relendo a comanda, em vez
+      Mesmo tratamento em `AdicionarAjuste` e `Fechar`.
+- [x] `AbrirOuObterComandaMesa` trata violação de unicidade (`23505`) relendo a comanda, em vez
       de devolver 500 (A-3).
-- [ ] Teste de concorrência para os dois casos.
+- [x] Teste de concorrência para os dois casos
+      (`testes/.../Integracao/ConcorrenciaComandaTestes.cs`).
 
 ### E1-07 — Log estruturado
 **Critérios de aceite**
@@ -120,21 +131,38 @@ fechadas podem exibir R$ 0,01 de restante — cosmético no histórico, correto 
 
 > Corrige C-1. Pré-requisito duro de estoque e fiscal (AD-01).
 
+**Status em 2026-08-11 — 3 de 3 entregues. Épico fechado.**
+
 ### E2-01 — Papel no usuário e no token
-- [ ] `usuario.papel` (`DONO` | `OPERADOR`), migration com o usuário existente virando `DONO`.
-- [ ] Claim de papel no JWT (`TokenServico.cs`).
-- [ ] `[Authorize(Roles = "DONO")]` em `RelatoriosController`, no CRUD de `CatalogoController`
-      e em tudo que vier de estoque/fiscal.
+- [x] `usuario.papel` (`DONO` | `OPERADOR`), migration `003_papel_do_usuario.sql` com o usuário
+      existente virando `DONO` e o padrão passando a `OPERADOR` só depois do backfill.
+- [x] Claim de papel no JWT (`TokenServico.cs`), com `RoleClaimType = "papel"` no `Program.cs`.
+- [x] `[Authorize(Roles = "DONO")]` em `RelatoriosController`, no CRUD de `CatalogoController`,
+      no resumo financeiro de `ComandasController` e na gestão de contas.
 
 ### E2-02 — Fechar o cadastro público
-- [ ] `/api/autenticacao/cadastro` deixa de ser `[AllowAnonymous]`; passa a exigir `DONO`.
-- [ ] Tela de "Criar conta" sai do login e vira gestão de usuários dentro do Administrativo.
-- [ ] Política mínima de senha validada **no servidor** (M-2).
+- [x] `/api/autenticacao/cadastro` passa a exigir `DONO`. A exceção é a instalação sem nenhum
+      usuário, onde a primeira conta nasce `DONO` — senão um clone novo não teria como entrar.
+      A regra vive em `UsuarioServico.Cadastrar`, não no atributo do controller.
+- [x] Tela de "Criar conta" saiu do login e virou **Administrativo → Contas de acesso**
+      (`componentes/PainelUsuarios.jsx`). O login só mostra formulário no primeiro acesso.
+- [x] Política de senha no servidor (`Servicos/PoliticaDeSenha.cs`): 8+ caracteres, letra e
+      número, e não pode conter o nome de usuário. Coberta por testes unitários.
 
 ### E2-03 — Endurecer o login
-- [ ] Rate limiting no login (ex.: 5 tentativas por usuário/IP por minuto) (M-1).
-- [ ] `estaLogado()` passa a checar a expiração do token, não só a presença (M-4, `api.js:24`).
-- [ ] CORS por configuração, não fixo em `localhost:5173` (M-5, `Program.cs:44`).
+- [x] Rate limiting: 5 tentativas por minuto por origem em login e cadastro, 30 no
+      `primeiro-acesso` (`Servicos/LimitesDeRequisicao.cs`). Rejeição volta 429 com mensagem em
+      português.
+- [x] `estaLogado()` decodifica o `exp` do token em vez de só checar presença (`api.js`).
+- [x] CORS por configuração — já entregue na Fase 0 (`Cors:Origens`).
+
+**Não entrou, de propósito:** desativar ou excluir conta. Usuário vai virar autor de lançamento
+de estoque (E5-02) e apagar quem registrou uma perda destruiria a trilha. Quando for preciso,
+o caminho é `usuario.ativo`, junto com a história que criar o autor do movimento.
+
+**Verificado com a API no ar,** contra banco descartável: atendente recebe 403 em relatórios,
+resumo financeiro, lista de contas e CRUD do cardápio; 200 em produtos e mesas. Cadastro anônimo
+só passa quando não há usuário. Sexta tentativa de login no mesmo minuto volta 429.
 
 ---
 

@@ -20,15 +20,31 @@ public class ComandaServico(
 
     public Task<ResumoFinanceiroResposta> ResumoFinanceiro() => comandas.ResumoFinanceiro();
 
-    /// <summary>Retorna a comanda aberta da mesa; se não existir, abre uma nova.</summary>
+    /// <summary>
+    /// Retorna a comanda aberta da mesa; se não existir, abre uma nova.
+    ///
+    /// Dois atendentes abrindo a mesma mesa ao mesmo tempo: o índice único
+    /// <c>ux_comanda_mesa_aberta</c> barra o segundo INSERT, e aqui isso vira releitura
+    /// da comanda que o primeiro acabou de abrir — os dois veem a mesma comanda,
+    /// em vez de o segundo receber 500.
+    /// </summary>
     public async Task<ComandaDetalheResposta> AbrirOuObterComandaMesa(int mesaNumero)
     {
         if (!await comandas.MesaExiste(mesaNumero))
             throw new RegraDeNegocioException($"Mesa {mesaNumero} não existe.");
 
         var comanda = await comandas.BuscarAbertaDaMesa(mesaNumero);
-        var id = comanda?.Id ?? await comandas.AbrirComandaMesa(mesaNumero);
-        return await MontarDetalhe(id);
+        if (comanda is not null)
+            return await MontarDetalhe(comanda.Id);
+
+        var id = await comandas.AbrirComandaMesa(mesaNumero);
+        if (id is not null)
+            return await MontarDetalhe(id.Value);
+
+        var concorrente = await comandas.BuscarAbertaDaMesa(mesaNumero)
+            ?? throw new RegraDeNegocioException(
+                $"Não foi possível abrir a comanda da mesa {mesaNumero}. Tente de novo.");
+        return await MontarDetalhe(concorrente.Id);
     }
 
     public async Task<ComandaDetalheResposta> AbrirComandaBalcao()
@@ -104,21 +120,28 @@ public class ComandaServico(
         return await MontarDetalhe(comandaId);
     }
 
+    /// <summary>
+    /// Registra pagamento. Valida e grava na mesma transação, com a comanda travada:
+    /// dois caixas simultâneos passavam os dois pela conferência do restante e o total
+    /// pago ultrapassava o devido.
+    /// </summary>
     public async Task<ComandaDetalheResposta> AdicionarPagamento(int comandaId, NovoPagamentoRequisicao requisicao)
     {
-        await BuscarAbertaOuFalhar(comandaId);
-
         var forma = requisicao.Forma.Trim().ToUpperInvariant();
         if (!FormaPagamento.Validas.Contains(forma))
             throw new RegraDeNegocioException("Forma de pagamento inválida. Use: CREDITO, DEBITO, DINHEIRO ou PIX.");
 
-        var detalhe = await MontarDetalhe(comandaId);
+        await using var escopo = await comandas.AbrirTransacao();
+        await TravarAbertaOuFalhar(comandaId, escopo);
+
+        var detalhe = await MontarDetalhe(comandaId, escopo);
         if (detalhe.Itens.Count == 0)
             throw new RegraDeNegocioException("Não é possível registrar pagamento em comanda sem produtos.");
         if (requisicao.Valor > detalhe.Restante)
             throw new RegraDeNegocioException("Pagamento maior que o valor restante da comanda.");
 
-        await comandas.InserirPagamento(comandaId, forma, requisicao.Valor);
+        await comandas.InserirPagamento(comandaId, forma, requisicao.Valor, escopo);
+        await escopo.Confirmar();
         return await MontarDetalhe(comandaId);
     }
 
@@ -134,22 +157,25 @@ public class ComandaServico(
     /// <summary>
     /// Registra desconto ou sangria: a parte do valor devido que não será paga.
     /// Só é permitido em comanda aberta, com produtos, e nunca maior que o restante.
+    /// Mesma transação travada do pagamento, pelo mesmo motivo.
     /// </summary>
     public async Task<ComandaDetalheResposta> AdicionarAjuste(int comandaId, NovoAjusteRequisicao requisicao)
     {
-        await BuscarAbertaOuFalhar(comandaId);
-
         var tipo = requisicao.Tipo.Trim().ToUpperInvariant();
         if (!TipoAjuste.Validos.Contains(tipo))
             throw new RegraDeNegocioException("Tipo de ajuste inválido. Use: DESCONTO ou SANGRIA.");
 
-        var detalhe = await MontarDetalhe(comandaId);
+        await using var escopo = await comandas.AbrirTransacao();
+        await TravarAbertaOuFalhar(comandaId, escopo);
+
+        var detalhe = await MontarDetalhe(comandaId, escopo);
         if (detalhe.Itens.Count == 0)
             throw new RegraDeNegocioException("Não é possível registrar ajuste em comanda sem produtos.");
         if (requisicao.Valor > detalhe.Restante)
             throw new RegraDeNegocioException("Ajuste maior que o valor restante da comanda.");
 
-        await comandas.InserirAjuste(comandaId, tipo, requisicao.Valor);
+        await comandas.InserirAjuste(comandaId, tipo, requisicao.Valor, escopo);
+        await escopo.Confirmar();
         return await MontarDetalhe(comandaId);
     }
 
@@ -195,8 +221,10 @@ public class ComandaServico(
     /// </summary>
     public async Task<ComandaDetalheResposta> Fechar(int comandaId)
     {
-        await BuscarAbertaOuFalhar(comandaId);
-        var detalhe = await MontarDetalhe(comandaId);
+        await using var escopo = await comandas.AbrirTransacao();
+        await TravarAbertaOuFalhar(comandaId, escopo);
+
+        var detalhe = await MontarDetalhe(comandaId, escopo);
 
         if (detalhe.Itens.Count > 0 && detalhe.Restante > 0)
             throw new RegraDeNegocioException(
@@ -205,7 +233,8 @@ public class ComandaServico(
         if (detalhe.Itens.Count == 0 && detalhe.Pagamentos.Count > 0)
             throw new RegraDeNegocioException("Comanda sem produtos não pode ter pagamentos. Remova os pagamentos.");
 
-        await comandas.Fechar(comandaId);
+        await comandas.Fechar(comandaId, escopo);
+        await escopo.Confirmar();
         return await MontarDetalhe(comandaId);
     }
 
@@ -221,8 +250,8 @@ public class ComandaServico(
         await comandas.Excluir(comandaId);
     }
 
-    private async Task<Comanda> BuscarOuFalhar(int comandaId) =>
-        await comandas.Buscar(comandaId)
+    private async Task<Comanda> BuscarOuFalhar(int comandaId, EscopoTransacao? escopo = null) =>
+        await comandas.Buscar(comandaId, escopo)
         ?? throw new RegraDeNegocioException("Comanda não encontrada.");
 
     private async Task<Comanda> BuscarAbertaOuFalhar(int comandaId)
@@ -233,13 +262,26 @@ public class ComandaServico(
         return comanda;
     }
 
-    /// <summary>Todos os totais são calculados aqui, no servidor — nunca no navegador.</summary>
-    private async Task<ComandaDetalheResposta> MontarDetalhe(int comandaId)
+    /// <summary>
+    /// Mesma checagem de <see cref="BuscarAbertaOuFalhar"/>, mas segurando a linha da comanda
+    /// até o commit. Quem tentar a mesma comanda em paralelo espera aqui.
+    /// </summary>
+    private async Task<Comanda> TravarAbertaOuFalhar(int comandaId, EscopoTransacao escopo)
     {
-        var comanda = await BuscarOuFalhar(comandaId);
-        var itens = (await comandas.ListarItens(comandaId)).ToList();
-        var pagamentos = (await comandas.ListarPagamentos(comandaId)).ToList();
-        var ajustes = (await comandas.ListarAjustes(comandaId)).ToList();
+        var comanda = await comandas.BuscarParaAtualizar(comandaId, escopo)
+            ?? throw new RegraDeNegocioException("Comanda não encontrada.");
+        if (comanda.Status != StatusComanda.Aberta)
+            throw new RegraDeNegocioException("Comanda já está fechada.");
+        return comanda;
+    }
+
+    /// <summary>Todos os totais são calculados aqui, no servidor — nunca no navegador.</summary>
+    private async Task<ComandaDetalheResposta> MontarDetalhe(int comandaId, EscopoTransacao? escopo = null)
+    {
+        var comanda = await BuscarOuFalhar(comandaId, escopo);
+        var itens = (await comandas.ListarItens(comandaId, escopo)).ToList();
+        var pagamentos = (await comandas.ListarPagamentos(comandaId, escopo)).ToList();
+        var ajustes = (await comandas.ListarAjustes(comandaId, escopo)).ToList();
 
         var totais = CalculadoraComanda.Calcular(
             itens, pagamentos, ajustes, comanda.TaxaServicoAplicada, PercentualTaxa);

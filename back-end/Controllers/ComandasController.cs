@@ -1,4 +1,5 @@
 using MenuRestaurante.Api.Dtos;
+using MenuRestaurante.Api.Modelos;
 using MenuRestaurante.Api.Servicos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -78,6 +79,8 @@ public class ComandasController(ComandaServico servico) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Faturamento do dia e total em aberto — mesma restrição dos relatórios.</summary>
     [HttpGet("relatorios/resumo")]
+    [Authorize(Roles = PapelUsuario.Dono)]
     public async Task<IActionResult> ResumoFinanceiro() => Ok(await servico.ResumoFinanceiro());
 }

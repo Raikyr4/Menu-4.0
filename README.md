@@ -57,7 +57,15 @@ npm run dev
 dotnet test back-end/MenuRestaurante.Api.sln
 ```
 
-Acesse http://localhost:5173. Usuário inicial: `oi` (senha do sistema antigo), ou crie uma conta na tela de login.
+Os testes de integração criam um banco descartável a cada caso e o apagam no fim. A conexão
+sai de `MENU_TESTES_CONEXAO` ou, na falta dela, do `back-end/appsettings.json`. Sem nenhuma
+das duas, esses testes aparecem como pulados e os de cálculo continuam rodando.
+
+### Primeiro acesso
+
+Acesse http://localhost:5173. Banco sem nenhum usuário: a própria tela de login oferece criar
+a conta do dono. Depois disso, contas novas são criadas pelo dono em **Administrativo → Contas
+de acesso** — não há mais cadastro aberto.
 
 ## Funcionalidades
 
@@ -73,9 +81,12 @@ Acesse http://localhost:5173. Usuário inicial: `oi` (senha do sistema antigo), 
 - **Comanda** é o atendimento (mesa ou balcão). Fechada, vira registro de faturamento — nunca é apagada.
 - **Taxa de serviço**: 10% (configurável em `appsettings.json`), aplicada por padrão em mesas; balcão nunca tem taxa.
 - **Totais são calculados só no servidor** — o navegador nunca envia valores de total.
-- Fechamento exige pagamento integral; pagamento não pode exceder o restante.
+- Fechamento exige pagamento integral; pagamento não pode exceder o restante. A conferência e
+  a gravação acontecem na mesma transação, com a comanda travada — dois caixas simultâneos não
+  ultrapassam o valor devido.
 - Pedido de balcão aberto pode ser excluído; fechado, não.
-- Autenticação via JWT (12h). Cadastro aberto na tela de login.
+- Autenticação via JWT (12h) com papel: **DONO** vê faturamento, altera cardápio e cria contas;
+  **OPERADOR** atende mesa e balcão. Login tem limite de 5 tentativas por minuto.
 
 ## Próximos passos
 

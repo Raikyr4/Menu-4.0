@@ -1,6 +1,7 @@
 using Dapper;
 using MenuRestaurante.Api.Dtos;
 using MenuRestaurante.Api.Modelos;
+using Npgsql;
 
 namespace MenuRestaurante.Api.Repositorios;
 
@@ -14,12 +15,39 @@ public enum ResultadoExclusaoMesa
 
 public class ComandaRepositorio(FabricaConexao fabrica)
 {
-    public async Task<Comanda?> Buscar(int id)
+    /// <summary>
+    /// Abre uma transação que o serviço segura enquanto valida e grava.
+    /// Os métodos que aceitam <c>escopo</c> passam a usar essa conexão em vez de abrir a sua.
+    /// </summary>
+    public Task<EscopoTransacao> AbrirTransacao() => EscopoTransacao.Iniciar(fabrica);
+
+    /// <summary>
+    /// Roda dentro do escopo quando existe um; senão abre e fecha a própria conexão.
+    /// É o que permite o mesmo método servir a uma leitura solta e a um passo de transação.
+    /// </summary>
+    private async Task<T> Executar<T>(
+        EscopoTransacao? escopo, Func<NpgsqlConnection, NpgsqlTransaction?, Task<T>> acao)
     {
+        if (escopo is not null)
+            return await acao(escopo.Conexao, escopo.Transacao);
+
         await using var conexao = fabrica.CriarConexao();
-        return await conexao.QuerySingleOrDefaultAsync<Comanda>(
-            "SELECT * FROM comanda WHERE id = @id", new { id });
+        return await acao(conexao, null);
     }
+
+    public Task<Comanda?> Buscar(int id, EscopoTransacao? escopo = null) =>
+        Executar(escopo, (conexao, transacao) =>
+            conexao.QuerySingleOrDefaultAsync<Comanda>(
+                "SELECT * FROM comanda WHERE id = @id", new { id }, transacao));
+
+    /// <summary>
+    /// Lê a comanda travando a linha até o fim da transação. Um segundo caixa que tentar
+    /// a mesma comanda espera aqui e só depois lê o estado já com o pagamento do primeiro.
+    /// </summary>
+    public Task<Comanda?> BuscarParaAtualizar(int id, EscopoTransacao escopo) =>
+        Executar(escopo, (conexao, transacao) =>
+            conexao.QuerySingleOrDefaultAsync<Comanda>(
+                "SELECT * FROM comanda WHERE id = @id FOR UPDATE", new { id }, transacao));
 
     public async Task<Comanda?> BuscarAbertaDaMesa(int mesaNumero)
     {
@@ -36,14 +64,26 @@ public class ComandaRepositorio(FabricaConexao fabrica)
             "SELECT EXISTS (SELECT 1 FROM mesa WHERE numero = @numero AND ativa)", new { numero });
     }
 
-    public async Task<int> AbrirComandaMesa(int mesaNumero)
+    /// <summary>
+    /// Abre a comanda da mesa. Devolve <c>null</c> quando o índice único
+    /// <c>ux_comanda_mesa_aberta</c> barra a inserção: outro atendente abriu a mesma mesa
+    /// no intervalo entre a consulta e a inserção. Quem chamou relê a comanda existente.
+    /// </summary>
+    public async Task<int?> AbrirComandaMesa(int mesaNumero)
     {
         await using var conexao = fabrica.CriarConexao();
-        return await conexao.ExecuteScalarAsync<int>(
-            @"INSERT INTO comanda (tipo, mesa_numero, taxa_servico_aplicada)
-              VALUES ('MESA', @mesaNumero, TRUE)
-              RETURNING id",
-            new { mesaNumero });
+        try
+        {
+            return await conexao.ExecuteScalarAsync<int>(
+                @"INSERT INTO comanda (tipo, mesa_numero, taxa_servico_aplicada)
+                  VALUES ('MESA', @mesaNumero, TRUE)
+                  RETURNING id",
+                new { mesaNumero });
+        }
+        catch (PostgresException excecao) when (excecao.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            return null;
+        }
     }
 
     public async Task<int> AbrirComandaBalcao()
@@ -55,36 +95,34 @@ public class ComandaRepositorio(FabricaConexao fabrica)
               RETURNING id");
     }
 
-    public async Task<IEnumerable<ComandaItem>> ListarItens(int comandaId)
-    {
-        await using var conexao = fabrica.CriarConexao();
-        var itens = (await conexao.QueryAsync<ComandaItem>(
-            @"SELECT ci.*, p.nome AS produto_nome
-              FROM comanda_item ci
-              JOIN produto p ON p.id = ci.produto_id
-              WHERE ci.comanda_id = @comandaId
-              ORDER BY ci.id",
-            new { comandaId })).ToList();
-        if (itens.Count == 0) return itens;
+    public Task<IEnumerable<ComandaItem>> ListarItens(int comandaId, EscopoTransacao? escopo = null) =>
+        Executar<IEnumerable<ComandaItem>>(escopo, async (conexao, transacao) =>
+        {
+            var itens = (await conexao.QueryAsync<ComandaItem>(
+                @"SELECT ci.*, p.nome AS produto_nome
+                  FROM comanda_item ci
+                  JOIN produto p ON p.id = ci.produto_id
+                  WHERE ci.comanda_id = @comandaId
+                  ORDER BY ci.id",
+                new { comandaId }, transacao)).ToList();
+            if (itens.Count == 0) return itens;
 
-        var ids = itens.Select(i => i.Id).ToArray();
-        var opcoes = await conexao.QueryAsync<ComandaItemOpcao>(
-            @"SELECT * FROM comanda_item_opcao
-              WHERE comanda_item_id = ANY(@ids)
-              ORDER BY id", new { ids });
-        var itemPorId = itens.ToDictionary(i => i.Id);
-        foreach (var opcao in opcoes)
-            itemPorId[opcao.ComandaItemId].Opcoes.Add(opcao);
-        return itens;
-    }
+            var ids = itens.Select(i => i.Id).ToArray();
+            var opcoes = await conexao.QueryAsync<ComandaItemOpcao>(
+                @"SELECT * FROM comanda_item_opcao
+                  WHERE comanda_item_id = ANY(@ids)
+                  ORDER BY id", new { ids }, transacao);
+            var itemPorId = itens.ToDictionary(i => i.Id);
+            foreach (var opcao in opcoes)
+                itemPorId[opcao.ComandaItemId].Opcoes.Add(opcao);
+            return itens;
+        });
 
-    public async Task<IEnumerable<Pagamento>> ListarPagamentos(int comandaId)
-    {
-        await using var conexao = fabrica.CriarConexao();
-        return await conexao.QueryAsync<Pagamento>(
-            "SELECT * FROM pagamento WHERE comanda_id = @comandaId ORDER BY id",
-            new { comandaId });
-    }
+    public Task<IEnumerable<Pagamento>> ListarPagamentos(int comandaId, EscopoTransacao? escopo = null) =>
+        Executar(escopo, (conexao, transacao) =>
+            conexao.QueryAsync<Pagamento>(
+                "SELECT * FROM pagamento WHERE comanda_id = @comandaId ORDER BY id",
+                new { comandaId }, transacao));
 
     public async Task<int> InserirItem(
         int comandaId, int produtoId, decimal quantidade, string unidade,
@@ -124,15 +162,14 @@ public class ComandaRepositorio(FabricaConexao fabrica)
             new { comandaId, itemId });
     }
 
-    public async Task<int> InserirPagamento(int comandaId, string forma, decimal valor)
-    {
-        await using var conexao = fabrica.CriarConexao();
-        return await conexao.ExecuteScalarAsync<int>(
-            @"INSERT INTO pagamento (comanda_id, forma, valor)
-              VALUES (@comandaId, @forma, @valor)
-              RETURNING id",
-            new { comandaId, forma, valor });
-    }
+    public Task<int> InserirPagamento(
+        int comandaId, string forma, decimal valor, EscopoTransacao? escopo = null) =>
+        Executar(escopo, (conexao, transacao) =>
+            conexao.ExecuteScalarAsync<int>(
+                @"INSERT INTO pagamento (comanda_id, forma, valor)
+                  VALUES (@comandaId, @forma, @valor)
+                  RETURNING id",
+                new { comandaId, forma, valor }, transacao));
 
     public async Task<int> RemoverPagamento(int comandaId, int pagamentoId)
     {
@@ -142,23 +179,20 @@ public class ComandaRepositorio(FabricaConexao fabrica)
             new { comandaId, pagamentoId });
     }
 
-    public async Task<IEnumerable<ComandaAjuste>> ListarAjustes(int comandaId)
-    {
-        await using var conexao = fabrica.CriarConexao();
-        return await conexao.QueryAsync<ComandaAjuste>(
-            "SELECT * FROM comanda_ajuste WHERE comanda_id = @comandaId ORDER BY id",
-            new { comandaId });
-    }
+    public Task<IEnumerable<ComandaAjuste>> ListarAjustes(int comandaId, EscopoTransacao? escopo = null) =>
+        Executar(escopo, (conexao, transacao) =>
+            conexao.QueryAsync<ComandaAjuste>(
+                "SELECT * FROM comanda_ajuste WHERE comanda_id = @comandaId ORDER BY id",
+                new { comandaId }, transacao));
 
-    public async Task<int> InserirAjuste(int comandaId, string tipo, decimal valor)
-    {
-        await using var conexao = fabrica.CriarConexao();
-        return await conexao.ExecuteScalarAsync<int>(
-            @"INSERT INTO comanda_ajuste (comanda_id, tipo, valor)
-              VALUES (@comandaId, @tipo, @valor)
-              RETURNING id",
-            new { comandaId, tipo, valor });
-    }
+    public Task<int> InserirAjuste(
+        int comandaId, string tipo, decimal valor, EscopoTransacao? escopo = null) =>
+        Executar(escopo, (conexao, transacao) =>
+            conexao.ExecuteScalarAsync<int>(
+                @"INSERT INTO comanda_ajuste (comanda_id, tipo, valor)
+                  VALUES (@comandaId, @tipo, @valor)
+                  RETURNING id",
+                new { comandaId, tipo, valor }, transacao));
 
     public async Task<int> RemoverAjuste(int comandaId, int ajusteId)
     {
@@ -226,13 +260,11 @@ public class ComandaRepositorio(FabricaConexao fabrica)
             new { comandaId, aplicada });
     }
 
-    public async Task Fechar(int comandaId)
-    {
-        await using var conexao = fabrica.CriarConexao();
-        await conexao.ExecuteAsync(
-            "UPDATE comanda SET status = 'FECHADA', fechada_em = now() WHERE id = @comandaId",
-            new { comandaId });
-    }
+    public Task<int> Fechar(int comandaId, EscopoTransacao? escopo = null) =>
+        Executar(escopo, (conexao, transacao) =>
+            conexao.ExecuteAsync(
+                "UPDATE comanda SET status = 'FECHADA', fechada_em = now() WHERE id = @comandaId",
+                new { comandaId }, transacao));
 
     /// <summary>Exclui comanda de balcão aberta (itens e pagamentos caem por cascade).</summary>
     public async Task<int> Excluir(int comandaId)

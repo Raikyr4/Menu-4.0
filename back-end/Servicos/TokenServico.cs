@@ -19,7 +19,10 @@ public class TokenServico(IConfiguration configuracao)
         {
             new Claim(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.UniqueName, usuario.NomeUsuario),
-            new Claim("nome", usuario.Nome)
+            new Claim("nome", usuario.Nome),
+            // O papel vai assinado no token: o front pode esconder botão, mas quem decide
+            // é o [Authorize(Roles = ...)] do servidor.
+            new Claim(PapelUsuario.TipoDeClaim, usuario.Papel)
         };
 
         var token = new JwtSecurityToken(

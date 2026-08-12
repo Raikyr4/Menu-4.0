@@ -20,6 +20,7 @@ import {
 } from 'recharts';
 import Cabecalho from '../componentes/Cabecalho.jsx';
 import Carregando from '../componentes/Carregando.jsx';
+import PainelUsuarios from '../componentes/PainelUsuarios.jsx';
 import ResumoFinanceiro from '../componentes/ResumoFinanceiro.jsx';
 import { api, dataPuraLocal, formatarReal } from '../servicos/api.js';
 import { pdfCaixaDiario, pdfFormasPagamento, pdfProdutosMaisVendidos } from '../servicos/relatoriosPdf.js';
@@ -141,6 +142,8 @@ export default function Administrativo() {
         </div>
 
         <ResumoFinanceiro />
+
+        <PainelUsuarios />
 
         {erro && <div className="alerta alerta-erro">{erro}</div>}
 

@@ -6,9 +6,16 @@ public record LoginRequisicao(
     [Required(ErrorMessage = "Informe o usuário")] string NomeUsuario,
     [Required(ErrorMessage = "Informe a senha")] string Senha);
 
+/// <summary>
+/// A regra de senha de verdade está em <c>PoliticaDeSenha</c>, no servidor. Aqui só fica o
+/// que o formulário precisa para avisar cedo — quem chama a API direto passa pela outra.
+/// </summary>
 public record CadastroRequisicao(
     [Required(ErrorMessage = "Informe o usuário")] string NomeUsuario,
-    [Required(ErrorMessage = "Informe a senha"), MinLength(4, ErrorMessage = "Senha precisa de ao menos 4 caracteres")] string Senha,
-    [Required(ErrorMessage = "Informe o nome")] string Nome);
+    [Required(ErrorMessage = "Informe a senha")] string Senha,
+    [Required(ErrorMessage = "Informe o nome")] string Nome,
+    string? Papel = null);
 
-public record LoginResposta(string Token, string Nome, DateTimeOffset ExpiraEm);
+public record LoginResposta(string Token, string Nome, string Papel, DateTimeOffset ExpiraEm);
+
+public record UsuarioResposta(int Id, string NomeUsuario, string Nome, string Papel, DateTimeOffset CriadoEm);

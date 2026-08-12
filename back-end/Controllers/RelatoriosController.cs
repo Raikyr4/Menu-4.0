@@ -1,11 +1,13 @@
+using MenuRestaurante.Api.Modelos;
 using MenuRestaurante.Api.Repositorios;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MenuRestaurante.Api.Controllers;
 
+/// <summary>Faturamento é do dono. Atendente não vê nada daqui (AD-01, achado C-1).</summary>
 [ApiController]
-[Authorize]
+[Authorize(Roles = PapelUsuario.Dono)]
 [Route("api/relatorios")]
 public class RelatoriosController(RelatorioRepositorio relatorios, IConfiguration configuracao) : ControllerBase
 {

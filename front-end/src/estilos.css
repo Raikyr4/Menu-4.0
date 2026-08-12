@@ -263,30 +263,9 @@ input, select { font-family: inherit; }
   margin-bottom: 24px;
 }
 
-.abas {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  background: var(--fundo-suave);
-  border-radius: var(--raio-pequeno);
-  padding: 4px;
-  margin-bottom: 22px;
-}
-
-.abas button {
-  border: none;
-  background: transparent;
-  color: var(--texto-suave);
-  font-weight: 600;
-  font-size: 0.9rem;
-  padding: 9px 0;
-  border-radius: 7px;
-  cursor: pointer;
-  transition: background var(--transicao), color var(--transicao);
-}
-
-.abas button.ativa {
-  background: var(--superficie-alta);
-  color: var(--texto);
+.cartao-login .descricao-rodape {
+  margin: 18px 0 0;
+  font-size: 0.82rem;
 }
 
 /* ---------- Mensagens ---------- */
@@ -777,6 +756,23 @@ input, select { font-family: inherit; }
 .painel-cardapio { padding: 22px; min-width: 0; }
 
 .titulo-painel { font-size: 1.05rem; font-weight: 700; margin-bottom: 16px; }
+
+.subtitulo-painel {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  margin: -10px 0 18px;
+}
+
+/* Contas de acesso: campos lado a lado, com o botão alinhado à base da última linha */
+.formulario-usuario {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0 12px;
+  align-items: end;
+  margin-bottom: 20px;
+}
+
+.formulario-usuario .botao { margin-bottom: 16px; }
 
 .cabecalho-painel {
   display: flex;

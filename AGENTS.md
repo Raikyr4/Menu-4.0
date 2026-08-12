@@ -1,7 +1,7 @@
 # AGENTS.md
 
 <!-- BMAD-PROJECT-CONTEXT:START -->
-<!-- Proveniência: verificado em 2026-08-11, após a Fase 0 (rede de proteção) -->
+<!-- Proveniência: verificado em 2026-08-11, após a Fase 0 (rede de proteção) e a Fase 1 (papéis) -->
 
 ## Onde as coisas estão
 
@@ -49,6 +49,18 @@
 - **Comanda `FECHADA` é registro de faturamento e nunca é apagada nem alterada.**
 - Balcão nunca tem taxa de serviço. Mesa tem 10% por padrão, configurável em
   `Negocio:PercentualTaxaServico`.
+- **Validar e gravar valor acontece na mesma transação.** `AdicionarPagamento`,
+  `AdicionarAjuste` e `Fechar` abrem um `EscopoTransacao` (`Repositorios/EscopoTransacao.cs`) e
+  travam a comanda com `SELECT ... FOR UPDATE` antes de conferir o restante. Ler numa conexão e
+  gravar em outra deixa dois caixas passarem pela mesma validação. Métodos de repositório que
+  participam disso recebem `EscopoTransacao? escopo = null` e usam o helper `Executar`.
+- **`MapeamentoDapper.Configurar()` precisa rodar antes de qualquer consulta.** É estado global
+  e a falha é silenciosa: sem ele, `preco_unitario` não chega em `PrecoUnitario` e o total dá
+  zero sem erro. `Program.cs` chama no start; os testes, num `[ModuleInitializer]`.
+- **Acesso tem papel.** `usuario.papel` é `DONO` ou `OPERADOR`, viaja no JWT como a claim
+  `papel` (registrada em `RoleClaimType`). Faturamento, cadastro de cardápio e criação de contas
+  são `[Authorize(Roles = PapelUsuario.Dono)]`. Esconder botão no front é conveniência; o que
+  barra é o atributo no controller.
 
 ## Rodando e verificando
 
@@ -70,10 +82,13 @@ dotnet test back-end/MenuRestaurante.Api.sln
 
 ## Armadilhas conhecidas
 
-- **Não existe controle de papel de usuário.** Qualquer conta vê faturamento e altera cardápio,
-  e `/api/autenticacao/cadastro` é anônimo. Considere isso antes de expor a API fora da rede
-  local.
-- Padrão leitura-depois-escrita sem transação em `ComandaServico.AdicionarPagamento`,
-  `AdicionarAjuste` e `Fechar` — dois clientes simultâneos passam os dois pela validação.
+- **`/api/autenticacao/cadastro` é `[AllowAnonymous]` de propósito**, mas só passa anônimo
+  quando o banco não tem nenhum usuário — é como a primeira conta do dono nasce numa instalação
+  nova. A regra está em `UsuarioServico.Cadastrar`, não no atributo. Não "conserte" o atributo.
+- **Testes de integração precisam de Postgres.** Sem `MENU_TESTES_CONEXAO` nem
+  `back-end/appsettings.json`, eles são pulados — `dotnet test` fica verde sem ter provado nada
+  de banco. Confira a contagem de pulados antes de confiar no verde.
+- **Limite de 5 logins por minuto por IP.** Ao testar a API na mão, uma sequência de tentativas
+  começa a voltar 429; espere a janela virar em vez de procurar bug de autenticação.
 
 <!-- BMAD-PROJECT-CONTEXT:END -->
