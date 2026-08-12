@@ -15,7 +15,9 @@
   exemplo). Ver `banco-de-dados/LEIA-ME.md`.
 - `testes/MenuRestaurante.Testes/` — xUnit.
 - `_bmad-output/planning-artifacts/` — análise, PRD, spine de arquitetura, backlog e decisões
-  confirmadas dos módulos de estoque e fiscal.
+  confirmadas dos módulos de estoque e fiscal. Comece por
+  `06-estado-e-continuidade.md`: preparo de máquina nova, o que já foi implementado e por quê,
+  e qual é o próximo item.
 
 ## Convenções que diferem do padrão
 
