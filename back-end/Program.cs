@@ -10,6 +10,17 @@ var builder = WebApplication.CreateBuilder(args);
 // Colunas snake_case do Postgres -> propriedades PascalCase dos modelos
 DefaultTypeMap.MatchNamesWithUnderscores = true;
 
+// Configuração obrigatória é conferida aqui, antes de qualquer serviço subir.
+// Sem isso a falta de uma chave só aparecia como NullReferenceException no meio do start.
+var conexaoBanco = ExigirConfiguracao(
+    builder.Configuration.GetConnectionString("MenuRestaurante"),
+    "ConnectionStrings:MenuRestaurante");
+var chaveJwt = ExigirConfiguracao(builder.Configuration["Jwt:Chave"], "Jwt:Chave");
+if (chaveJwt.Length < 32)
+    throw new InvalidOperationException(
+        "Jwt:Chave precisa ter no mínimo 32 caracteres. " +
+        "Veja back-end/appsettings.example.json.");
+
 builder.Services.AddControllers();
 
 builder.Services.AddSingleton<FabricaConexao>();
@@ -32,33 +43,51 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Emissor"],
             ValidAudience = builder.Configuration["Jwt:Publico"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Chave"]!))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(chaveJwt))
         };
     });
 builder.Services.AddAuthorization();
 
+var origensPermitidas = builder.Configuration.GetSection("Cors:Origens").Get<string[]>()
+                        ?? ["http://localhost:5173"];
 builder.Services.AddCors(opcoes =>
 {
     opcoes.AddDefaultPolicy(politica =>
-        politica.WithOrigins("http://localhost:5173")
+        politica.WithOrigins(origensPermitidas)
                 .AllowAnyHeader()
                 .AllowAnyMethod());
 });
 
 var app = builder.Build();
 
-// Erros de regra de negócio viram 400 com mensagem em português
+var registrador = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Inicializacao");
+
+if (builder.Configuration.GetValue("Banco:AplicarMigracoesNoInicio", true))
+    MigradorBanco.Aplicar(conexaoBanco, registrador);
+
+// Erros de regra de negócio viram 400 com mensagem em português.
+// Qualquer outra exceção é registrada antes de virar 500 — sem isso, falha de
+// integração (SEFAZ, impressora) sumiria sem rastro.
 app.Use(async (contexto, proximo) =>
 {
+    var log = contexto.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Requisicao");
     try
     {
         await proximo();
     }
     catch (RegraDeNegocioException excecao)
     {
+        log.LogInformation("Regra de negócio barrou {Metodo} {Caminho}: {Mensagem}",
+            contexto.Request.Method, contexto.Request.Path, excecao.Message);
         contexto.Response.StatusCode = StatusCodes.Status400BadRequest;
         await contexto.Response.WriteAsJsonAsync(new { mensagem = excecao.Message });
+    }
+    catch (Exception excecao)
+    {
+        log.LogError(excecao, "Falha não tratada em {Metodo} {Caminho} (usuário {Usuario})",
+            contexto.Request.Method, contexto.Request.Path,
+            contexto.User.Identity?.Name ?? "anônimo");
+        throw;
     }
 });
 
@@ -68,3 +97,10 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static string ExigirConfiguracao(string? valor, string chave) =>
+    string.IsNullOrWhiteSpace(valor)
+        ? throw new InvalidOperationException(
+            $"Configuração obrigatória '{chave}' não encontrada. " +
+            "Copie back-end/appsettings.example.json para back-end/appsettings.json e preencha.")
+        : valor;

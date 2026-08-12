@@ -241,12 +241,8 @@ public class ComandaServico(
         var pagamentos = (await comandas.ListarPagamentos(comandaId)).ToList();
         var ajustes = (await comandas.ListarAjustes(comandaId)).ToList();
 
-        var total = itens.Sum(i => i.Quantidade * i.PrecoUnitario);
-        var taxa = comanda.TaxaServicoAplicada ? Math.Round(total * PercentualTaxa, 2) : 0m;
-        var totalComTaxa = total + taxa;
-        var pago = pagamentos.Sum(p => p.Valor);
-        var descontos = ajustes.Where(a => a.Tipo == TipoAjuste.Desconto).Sum(a => a.Valor);
-        var sangrias = ajustes.Where(a => a.Tipo == TipoAjuste.Sangria).Sum(a => a.Valor);
+        var totais = CalculadoraComanda.Calcular(
+            itens, pagamentos, ajustes, comanda.TaxaServicoAplicada, PercentualTaxa);
 
         return new ComandaDetalheResposta
         {
@@ -260,15 +256,14 @@ public class ComandaServico(
             Itens = itens,
             Pagamentos = pagamentos,
             Ajustes = ajustes,
-            Total = total,
-            TaxaServico = taxa,
-            TotalComTaxa = totalComTaxa,
-            TotalDevido = totalComTaxa,
-            Pago = pago,
-            TotalDescontos = descontos,
-            TotalSangrias = sangrias,
-            // Descontos e sangrias abatem o que falta pagar
-            Restante = Math.Max(totalComTaxa - pago - descontos - sangrias, 0)
+            Total = totais.Total,
+            TaxaServico = totais.TaxaServico,
+            TotalComTaxa = totais.TotalComTaxa,
+            TotalDevido = totais.TotalComTaxa,
+            Pago = totais.Pago,
+            TotalDescontos = totais.TotalDescontos,
+            TotalSangrias = totais.TotalSangrias,
+            Restante = totais.Restante
         };
     }
 }

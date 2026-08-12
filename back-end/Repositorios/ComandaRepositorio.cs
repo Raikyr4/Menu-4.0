@@ -280,9 +280,11 @@ public class ComandaRepositorio(FabricaConexao fabrica)
               FROM comanda c
               LEFT JOIN comanda_item ci ON ci.comanda_id = c.id
               WHERE c.tipo = 'BALCAO'
-                AND (c.status = 'ABERTA' OR c.aberta_em::date = CURRENT_DATE)
+                AND (c.status = 'ABERTA'
+                     OR (c.aberta_em AT TIME ZONE @fuso)::date = (now() AT TIME ZONE @fuso)::date)
               GROUP BY c.id
-              ORDER BY c.id DESC");
+              ORDER BY c.id DESC",
+            new { fuso = DiaDoNegocio.Fuso });
     }
 
     public async Task<ResumoFinanceiroResposta> ResumoFinanceiro()
@@ -292,10 +294,12 @@ public class ComandaRepositorio(FabricaConexao fabrica)
         var faturamentoTotal = await conexao.ExecuteScalarAsync<decimal>(
             "SELECT COALESCE(SUM(valor), 0) FROM pagamento");
 
-        // Caixa do dia: tudo recebido desde a meia-noite. Vira o dia, zera sozinho —
-        // o histórico continua consultável em /api/relatorios/caixa-diario.
+        // Caixa do dia: tudo recebido desde a meia-noite do fuso do negócio. Vira o dia,
+        // zera sozinho — o histórico continua consultável em /api/relatorios/caixa-diario.
         var faturamentoHoje = await conexao.ExecuteScalarAsync<decimal>(
-            "SELECT COALESCE(SUM(valor), 0) FROM pagamento WHERE pago_em::date = CURRENT_DATE");
+            @"SELECT COALESCE(SUM(valor), 0) FROM pagamento
+              WHERE (pago_em AT TIME ZONE @fuso)::date = (now() AT TIME ZONE @fuso)::date",
+            new { fuso = DiaDoNegocio.Fuso });
 
         var totalEmAberto = await conexao.ExecuteScalarAsync<decimal>(
             @"SELECT COALESCE(SUM(ci.quantidade * ci.preco_unitario), 0)

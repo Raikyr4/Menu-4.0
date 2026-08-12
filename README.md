@@ -12,28 +12,49 @@ Sistema de gestão de restaurante: mesas, balcão, comandas, pagamentos e fatura
 
 ## Como rodar
 
-### 1. Banco (uma vez só)
+### 1. Configuração (uma vez só)
+
+```bash
+cp back-end/appsettings.example.json back-end/appsettings.json
+```
+
+Preencha a senha do Postgres e uma `Jwt:Chave` de no mínimo 32 caracteres.
+`appsettings.json` é ignorado pelo git de propósito. Se faltar alguma chave obrigatória,
+a API não sobe e diz exatamente qual é.
+
+### 2. Banco
 
 ```bash
 psql -U postgres -f banco-de-dados/00_banco.sql
-psql -U postgres -d menu_restaurante -f banco-de-dados/01_criacao.sql
+```
+
+O esquema é aplicado por migrações versionadas (`back-end/Migracoes/`) — a API roda as
+pendentes sozinha ao subir. Ver `banco-de-dados/LEIA-ME.md`.
+
+Para carregar o cardápio de exemplo num banco novo:
+
+```bash
 psql -U postgres -d menu_restaurante -f banco-de-dados/02_populacao.sql
 ```
 
-A senha do Postgres fica em `back-end/appsettings.json` (`ConnectionStrings:MenuRestaurante`).
-
-### 2. API
+### 3. API
 
 ```bash
 dotnet run --project back-end
 ```
 
-### 3. Front
+### 4. Front
 
 ```bash
 cd front-end
 npm install
 npm run dev
+```
+
+### Testes
+
+```bash
+dotnet test back-end/MenuRestaurante.Api.sln
 ```
 
 Acesse http://localhost:5173. Usuário inicial: `oi` (senha do sistema antigo), ou crie uma conta na tela de login.
