@@ -71,8 +71,11 @@ de acesso** — não há mais cadastro aberto.
 
 - **Mesas e balcão**: comandas com itens, pagamentos parciais e fechamento validado.
 - **Cardápio**: CRUD de categorias e produtos (preço, venda por peso, destaque).
+- **Estoque**: insumos com saldo, custo médio ponderado móvel e valor imobilizado; entrada de
+  compra por fornecedor; perdas e ajustes com motivo obrigatório; extrato de cada insumo.
+  O saldo é a soma de um livro append-only — nunca um número editado à mão.
 - **Administrativo**: gráficos de caixa diário, vendas por semana/mês, top 10 produtos,
-  formas de pagamento, histórico de caixa e relatórios em PDF (jsPDF).
+  formas de pagamento, histórico de caixa, contas de acesso e relatórios em PDF (jsPDF).
 - **Caixa automático**: o total do dia zera sozinho à meia-noite — o histórico é derivado
   dos pagamentos por data, sem abertura/fechamento manual de caixa.
 

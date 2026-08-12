@@ -15,4 +15,14 @@ namespace MenuRestaurante.Api.Modelos;
 public static class DiaDoNegocio
 {
     public const string Fuso = "America/Sao_Paulo";
+
+    private static readonly TimeZoneInfo FusoHorario = TimeZoneInfo.FindSystemTimeZoneById(Fuso);
+
+    /// <summary>
+    /// A data de hoje para o restaurante. Usada quando o C# precisa de uma data padrão —
+    /// <c>DateTime.Today</c> devolveria o dia do servidor, que numa máquina em UTC vira o
+    /// dia seguinte depois das 21h.
+    /// </summary>
+    public static DateOnly Hoje() =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, FusoHorario).Date);
 }

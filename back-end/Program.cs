@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using MenuRestaurante.Api.Modelos;
 using MenuRestaurante.Api.Repositorios;
@@ -28,16 +29,26 @@ builder.Services.AddScoped<UsuarioRepositorio>();
 builder.Services.AddScoped<CatalogoRepositorio>();
 builder.Services.AddScoped<ComandaRepositorio>();
 builder.Services.AddScoped<RelatorioRepositorio>();
+builder.Services.AddScoped<EstoqueRepositorio>();
+builder.Services.AddScoped<CompraRepositorio>();
 builder.Services.AddScoped<TokenServico>();
 builder.Services.AddScoped<ComandaServico>();
 builder.Services.AddScoped<CatalogoServico>();
 builder.Services.AddScoped<UsuarioServico>();
+builder.Services.AddScoped<EstoqueServico>();
+builder.Services.AddScoped<CompraServico>();
 
 builder.Services.AddRateLimiter(LimitesDeRequisicao.Configurar);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opcoes =>
     {
+        // Por padrão o handler renomeia as claims do token para as URLs longas do esquema da
+        // Microsoft: 'sub' vira 'nameidentifier'. Quem lesse User.FindFirst("sub") recebia
+        // null — foi assim que o autor de todo lançamento de estoque ficou vazio.
+        // Desligado, o token que sai de TokenServico é o mesmo que chega aqui.
+        opcoes.MapInboundClaims = false;
+
         opcoes.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -49,7 +60,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(chaveJwt)),
             // Sem isto, [Authorize(Roles = "DONO")] procura a claim de papel do esquema da
             // Microsoft e não acha a nossa — todo mundo viraria 403.
-            RoleClaimType = PapelUsuario.TipoDeClaim
+            RoleClaimType = PapelUsuario.TipoDeClaim,
+            // E sem isto, User.Identity.Name fica nulo no log de erro.
+            NameClaimType = JwtRegisteredClaimNames.UniqueName
         };
     });
 builder.Services.AddAuthorization();

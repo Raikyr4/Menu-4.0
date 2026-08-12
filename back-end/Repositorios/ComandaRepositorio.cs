@@ -13,28 +13,8 @@ public enum ResultadoExclusaoMesa
     ComandaAberta
 }
 
-public class ComandaRepositorio(FabricaConexao fabrica)
+public class ComandaRepositorio(FabricaConexao fabrica) : RepositorioBase(fabrica)
 {
-    /// <summary>
-    /// Abre uma transação que o serviço segura enquanto valida e grava.
-    /// Os métodos que aceitam <c>escopo</c> passam a usar essa conexão em vez de abrir a sua.
-    /// </summary>
-    public Task<EscopoTransacao> AbrirTransacao() => EscopoTransacao.Iniciar(fabrica);
-
-    /// <summary>
-    /// Roda dentro do escopo quando existe um; senão abre e fecha a própria conexão.
-    /// É o que permite o mesmo método servir a uma leitura solta e a um passo de transação.
-    /// </summary>
-    private async Task<T> Executar<T>(
-        EscopoTransacao? escopo, Func<NpgsqlConnection, NpgsqlTransaction?, Task<T>> acao)
-    {
-        if (escopo is not null)
-            return await acao(escopo.Conexao, escopo.Transacao);
-
-        await using var conexao = fabrica.CriarConexao();
-        return await acao(conexao, null);
-    }
-
     public Task<Comanda?> Buscar(int id, EscopoTransacao? escopo = null) =>
         Executar(escopo, (conexao, transacao) =>
             conexao.QuerySingleOrDefaultAsync<Comanda>(
@@ -51,7 +31,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
 
     public async Task<Comanda?> BuscarAbertaDaMesa(int mesaNumero)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         return await conexao.QuerySingleOrDefaultAsync<Comanda>(
             "SELECT * FROM comanda WHERE tipo = 'MESA' AND mesa_numero = @mesaNumero AND status = 'ABERTA'",
             new { mesaNumero });
@@ -59,7 +39,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
 
     public async Task<bool> MesaExiste(int numero)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         return await conexao.ExecuteScalarAsync<bool>(
             "SELECT EXISTS (SELECT 1 FROM mesa WHERE numero = @numero AND ativa)", new { numero });
     }
@@ -71,7 +51,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
     /// </summary>
     public async Task<int?> AbrirComandaMesa(int mesaNumero)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         try
         {
             return await conexao.ExecuteScalarAsync<int>(
@@ -88,7 +68,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
 
     public async Task<int> AbrirComandaBalcao()
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         return await conexao.ExecuteScalarAsync<int>(
             @"INSERT INTO comanda (tipo, mesa_numero, taxa_servico_aplicada)
               VALUES ('BALCAO', NULL, FALSE)
@@ -128,7 +108,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
         int comandaId, int produtoId, decimal quantidade, string unidade,
         decimal precoUnitario, IReadOnlyCollection<ComandaItemOpcao> opcoes)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         await conexao.OpenAsync();
         await using var transacao = await conexao.BeginTransactionAsync();
         var itemId = await conexao.ExecuteScalarAsync<int>(
@@ -156,7 +136,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
 
     public async Task<int> RemoverItem(int comandaId, int itemId)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         return await conexao.ExecuteAsync(
             "DELETE FROM comanda_item WHERE id = @itemId AND comanda_id = @comandaId",
             new { comandaId, itemId });
@@ -173,7 +153,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
 
     public async Task<int> RemoverPagamento(int comandaId, int pagamentoId)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         return await conexao.ExecuteAsync(
             "DELETE FROM pagamento WHERE id = @pagamentoId AND comanda_id = @comandaId",
             new { comandaId, pagamentoId });
@@ -196,7 +176,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
 
     public async Task<int> RemoverAjuste(int comandaId, int ajusteId)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         return await conexao.ExecuteAsync(
             "DELETE FROM comanda_ajuste WHERE id = @ajusteId AND comanda_id = @comandaId",
             new { comandaId, ajusteId });
@@ -204,7 +184,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
 
     public async Task<int> CriarMesa()
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         await conexao.OpenAsync();
         await using var transacao = await conexao.BeginTransactionAsync();
         await conexao.ExecuteAsync(
@@ -219,7 +199,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
 
     public async Task<ResultadoExclusaoMesa> ExcluirMesa(int numero)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         await conexao.OpenAsync();
         await using var transacao = await conexao.BeginTransactionAsync();
 
@@ -254,7 +234,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
 
     public async Task AtualizarTaxaServico(int comandaId, bool aplicada)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         await conexao.ExecuteAsync(
             "UPDATE comanda SET taxa_servico_aplicada = @aplicada WHERE id = @comandaId",
             new { comandaId, aplicada });
@@ -269,7 +249,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
     /// <summary>Exclui comanda de balcão aberta (itens e pagamentos caem por cascade).</summary>
     public async Task<int> Excluir(int comandaId)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         return await conexao.ExecuteAsync(
             "DELETE FROM comanda WHERE id = @comandaId AND tipo = 'BALCAO' AND status = 'ABERTA'",
             new { comandaId });
@@ -278,7 +258,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
     /// <summary>Mesas com situação atual: ocupada = tem comanda aberta com itens.</summary>
     public async Task<IEnumerable<MesaResposta>> ListarMesas(decimal percentualTaxa)
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         return await conexao.QueryAsync<MesaResposta>(
             @"SELECT m.numero,
                      c.id AS comanda_id,
@@ -305,7 +285,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
     /// <summary>Pedidos de balcão do dia (abertos e fechados).</summary>
     public async Task<IEnumerable<PedidoBalcaoResposta>> ListarPedidosBalcaoDoDia()
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
         return await conexao.QueryAsync<PedidoBalcaoResposta>(
             @"SELECT c.id, c.status, c.aberta_em,
                      COALESCE(SUM(ci.quantidade * ci.preco_unitario), 0) AS total
@@ -321,7 +301,7 @@ public class ComandaRepositorio(FabricaConexao fabrica)
 
     public async Task<ResumoFinanceiroResposta> ResumoFinanceiro()
     {
-        await using var conexao = fabrica.CriarConexao();
+        await using var conexao = Fabrica.CriarConexao();
 
         var faturamentoTotal = await conexao.ExecuteScalarAsync<decimal>(
             "SELECT COALESCE(SUM(valor), 0) FROM pagamento");

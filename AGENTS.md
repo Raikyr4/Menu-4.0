@@ -10,7 +10,7 @@
 - `back-end/Migracoes/*.sql` — esquema versionado, aplicado pelo DbUp. **É aqui que o esquema
   muda**, nunca mais em `banco-de-dados/`.
 - `front-end/` — React 19 + Vite. `src/paginas/` (rotas), `src/componentes/`, `src/servicos/api.js`
-  (único cliente HTTP).
+  (único cliente HTTP). Rotas de dono passam por `RotaDoDono` em `App.jsx`.
 - `banco-de-dados/` — só `00_banco.sql` (cria o banco) e `02_populacao.sql` (cardápio de
   exemplo). Ver `banco-de-dados/LEIA-ME.md`.
 - `testes/MenuRestaurante.Testes/` — xUnit.
@@ -60,9 +60,19 @@
   e a falha é silenciosa: sem ele, `preco_unitario` não chega em `PrecoUnitario` e o total dá
   zero sem erro. `Program.cs` chama no start; os testes, num `[ModuleInitializer]`.
 - **Acesso tem papel.** `usuario.papel` é `DONO` ou `OPERADOR`, viaja no JWT como a claim
-  `papel` (registrada em `RoleClaimType`). Faturamento, cadastro de cardápio e criação de contas
-  são `[Authorize(Roles = PapelUsuario.Dono)]`. Esconder botão no front é conveniência; o que
-  barra é o atributo no controller.
+  `papel` (registrada em `RoleClaimType`). Faturamento, cadastro de cardápio, estoque e criação
+  de contas são `[Authorize(Roles = PapelUsuario.Dono)]`. Esconder botão no front é
+  conveniência; o que barra é o atributo no controller.
+- **As claims do token chegam com o nome original** (`sub`, `papel`, `unique_name`), porque
+  `MapInboundClaims = false` no `Program.cs`. Sem isso o handler renomeia para as URLs do
+  esquema da Microsoft e `User.FindFirst("sub")` devolve null — foi assim que o autor de todo
+  lançamento de estoque ficou vazio.
+- **Estoque não tem coluna de saldo.** Quantidade é `SUM(quantidade)` de `movimento_estoque`,
+  que é append-only — um *trigger* no banco recusa `UPDATE` e `DELETE`. Correção é lançamento
+  novo do tipo `AJUSTE`. O custo médio vigente é o `custo_medio_apos` do último lançamento que
+  mexeu na média, e só `ENTRADA` mexe.
+- **Custo de insumo tem 4 casas decimais**, dinheiro tem 2. Use
+  `CalculadoraEstoque.ArredondarCusto` — com 2 casas o custo do grama arredondaria para zero.
 
 ## Rodando e verificando
 

@@ -16,7 +16,7 @@ todo. Cada fase entrega algo utilizável — nenhuma fase é só preparação in
 |---|---|---|---|
 | 0 | E1 — Rede de proteção | ✅ **entregue** — nada visível, mas o resto deixa de ser no escuro | ~1 semana |
 | 1 | E2 — Papéis e acesso | ✅ **entregue** — garçom não vê faturamento | ~4 dias |
-| 2 | E3 — Cadastro de insumos e compras | "Quanto tenho de refrigerante e quanto custou" | ~1 semana |
+| 2 | E3 — Cadastro de insumos e compras | ✅ **entregue** — "quanto tenho de refrigerante e quanto custou" | ~1 semana |
 | 2 | E4 — Ficha técnica e baixa automática | Estoque desce sozinho ao fechar a comanda | ~1,5 semana |
 | 2 | E5 — Inventário, alertas e lista de compras | "O que preciso comprar hoje" | ~1 semana |
 | 3 | E6 — Fundação fiscal | Nada visível. Cadastro do emitente e dos produtos | ~1 semana |
@@ -170,27 +170,53 @@ só passa quando não há usuário. Sexta tentativa de login no mesmo minuto vol
 
 ### E3 — Cadastro de insumos e compras
 
+**Status em 2026-08-12 — 4 de 4 entregues. Épico fechado.**
+
 #### E3-01 — Entidade insumo
-- [ ] Tabela `insumo`: nome, unidade (`KG|G|L|ML|UN`), estoque mínimo, categoria, tipo
-      (`REVENDA` | `MATERIA_PRIMA`), ativo.
-- [ ] CRUD com exclusão lógica quando houver movimento (mesmo critério de `produto`).
-- [ ] Vínculo opcional 1:1 produto ↔ insumo para revenda (RF-11).
+- [x] Tabela `insumo` (migração `004_insumo.sql`): nome, unidade (`KG|G|L|ML|UN`), estoque
+      mínimo, categoria, tipo (`REVENDA` | `MATERIA_PRIMA`), ativo.
+- [x] CRUD com exclusão lógica quando houver movimento; insumo que nunca se moveu é apagado
+      de vez (cadastro criado por engano).
+- [x] Vínculo opcional 1:1 produto ↔ insumo para revenda (RF-11): `produto.insumo_id` com
+      índice único parcial.
+- [x] Índice único por nome entre os ativos — `Farinha` e `farinha` são o mesmo insumo.
 
 #### E3-02 — Livro de movimento
-- [ ] `movimento_estoque` append-only: insumo, tipo, quantidade (positiva ou negativa), custo
-      unitário congelado, origem (`comanda_id` ou `compra_id`), autor, motivo, `criado_em`.
-- [ ] **Nenhum** endpoint de UPDATE ou DELETE nessa tabela (AD-03).
-- [ ] Saldo por soma do livro, com teste.
+- [x] `movimento_estoque` (migração `005`) append-only: insumo, tipo, quantidade com sinal,
+      custo unitário congelado, origem (`comanda_id` ou `compra_id`), autor, motivo, `criado_em`.
+- [x] **Nenhum** endpoint de UPDATE ou DELETE (AD-03) — e um *trigger* no banco recusa os dois,
+      para que um script de manutenção distraído não apague a auditoria em silêncio.
+- [x] Saldo por soma do livro, com teste. Não existe coluna de saldo em `insumo`, e há teste
+      que falha se alguém criar uma.
+- [x] O banco também garante o sinal por tipo e o motivo obrigatório em `AJUSTE`, `PERDA` e
+      `INVENTARIO` (RF-26).
 
 #### E3-03 — Fornecedor e entrada de compra
-- [ ] `fornecedor`, `compra`, `compra_item` (RF-23).
-- [ ] Registrar compra gera `ENTRADA` para cada item, na mesma transação.
-- [ ] Custo médio ponderado móvel recalculado a cada entrada, com teste cobrindo:
-      primeira entrada; segunda entrada com preço diferente; entrada com saldo negativo (RF-24).
+- [x] `fornecedor`, `compra`, `compra_item` (migração `006`, RF-23).
+- [x] Registrar compra gera `ENTRADA` para cada item, na mesma transação. Item inválido no meio
+      não deixa nada gravado — coberto por teste.
+- [x] Custo médio ponderado móvel recalculado a cada entrada (`Servicos/CalculadoraEstoque.cs`),
+      com teste cobrindo primeira entrada, segunda com preço diferente, quantidades desiguais,
+      saldo zerado e saldo negativo (RF-24).
+- [x] O insumo é travado antes da leitura do saldo: duas compras simultâneas do mesmo insumo
+      leriam a mesma média e a segunda sairia errada. Teste verificado removendo o `FOR UPDATE`.
 
 #### E3-04 — Tela de estoque
-- [ ] Lista com saldo, custo médio, valor imobilizado, destaque de item abaixo do mínimo (RF-30).
-- [ ] Visível só para `DONO`.
+- [x] `paginas/Estoque.jsx`: lista com saldo, custo médio, valor imobilizado e destaque de item
+      abaixo do mínimo com a quantidade a comprar (RF-30, RF-31).
+- [x] Cadastro de insumo, lançamento de perda/ajuste/devolução com motivo, registro de compra
+      com vários itens, cadastro de fornecedor e extrato do insumo.
+- [x] Rota `/estoque` só para `DONO`, no front e na API.
+
+**Bug encontrado ao verificar com a API no ar:** o autor de todo lançamento ficava nulo. O
+handler do JwtBearer renomeia as claims do token para as URLs do esquema da Microsoft — `sub`
+virava `nameidentifier` e `User.FindFirst("sub")` devolvia null. Corrigido com
+`MapInboundClaims = false` no `Program.cs`, mais `NameClaimType = unique_name` para o
+`User.Identity.Name` do log continuar funcionando.
+
+**Custo médio tem quatro casas, não duas.** Uma esfiha leva 0,06 kg de massa: com duas casas o
+custo do grama arredondaria para zero e o CMV inteiro sumiria. O arredondamento continua sendo
+meio para cima, como o do dinheiro.
 
 ### E4 — Ficha técnica e baixa automática
 

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Armchair, BarChart3, BookOpen, ShoppingBag } from 'lucide-react';
+import { Armchair, BarChart3, BookOpen, Boxes, ShoppingBag } from 'lucide-react';
 import Cabecalho from '../componentes/Cabecalho.jsx';
 import { ehDono } from '../servicos/api.js';
 
@@ -33,6 +33,14 @@ export default function Frente() {
               <div className="icone"><BookOpen size={28} /></div>
               <h2>Cardápio</h2>
               <p>Cadastre e edite categorias e produtos: nomes, preços, venda por peso e destaques.</p>
+            </div>
+          )}
+
+          {dono && (
+            <div className="cartao cartao-atalho" onClick={() => navegar('/estoque')}>
+              <div className="icone"><Boxes size={28} /></div>
+              <h2>Estoque</h2>
+              <p>Insumos, compras e perdas: quanto tem de cada coisa, quanto custou e o que precisa comprar.</p>
             </div>
           )}
 

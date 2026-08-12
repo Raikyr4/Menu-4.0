@@ -1010,6 +1010,61 @@ input, select { font-family: inherit; }
 .rolagem-x { overflow-x: auto; }
 .rolagem-x .tabela { min-width: 480px; }
 
+/* ---------- Estoque ---------- */
+
+/* Item abaixo do mínimo: chama atenção sem parecer erro — falta de estoque
+   avisa, não bloqueia venda. */
+.tabela tr.linha-alerta td { background: rgba(232, 163, 61, 0.08); }
+.tabela tr.linha-alerta td:first-child { box-shadow: inset 3px 0 0 var(--primaria); }
+
+.aviso-linha {
+  color: var(--primaria);
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.celula-acoes { display: flex; gap: 4px; justify-content: flex-end; }
+
+.lista-simples { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+
+.lista-simples li {
+  background: var(--fundo-suave);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-pequeno);
+  padding: 6px 12px;
+  font-size: 0.86rem;
+  color: var(--texto-suave);
+}
+
+.linha-item-compra {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.linha-item-compra select,
+.linha-item-compra input {
+  background: var(--fundo-suave);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-pequeno);
+  padding: 10px 12px;
+  color: var(--texto);
+  font-size: 0.92rem;
+  outline: none;
+  min-width: 0;
+}
+
+.linha-item-compra select:focus,
+.linha-item-compra input:focus { border-color: var(--primaria); }
+
+@media (max-width: 640px) {
+  .linha-item-compra { grid-template-columns: 1fr 1fr; }
+  .linha-item-compra select { grid-column: 1 / -1; }
+}
+
 /* ---------- Modal ---------- */
 
 .sobreposicao-modal {

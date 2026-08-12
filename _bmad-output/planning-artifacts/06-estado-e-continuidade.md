@@ -72,7 +72,7 @@ o cadastro fecha, e contas novas saem de **Administrativo → Contas de acesso**
 dotnet test back-end/MenuRestaurante.Api.sln
 ```
 
-Esperado hoje: **48 testes, 0 pulados**. Se aparecerem pulados, é porque os testes de
+Esperado hoje: **78 testes, 0 pulados**. Se aparecerem pulados, é porque os testes de
 integração não acharam Postgres — veja a armadilha em §5.
 
 ---
@@ -83,9 +83,11 @@ integração não acharam Postgres — veja a armadilha em §5.
 |---|---|---|
 | 0 | E1 — Rede de proteção | ✅ 7 de 7 histórias |
 | 1 | E2 — Papéis e acesso | ✅ 3 de 3 histórias |
-| 2 | E3, E4, E5 — Estoque | ⬜ não começou |
+| 2 | E3 — Insumos, livro de estoque e compras | ✅ 4 de 4 histórias |
+| 2 | E4 — Ficha técnica e baixa automática | ⬜ próximo item |
+| 2 | E5 — Inventário, alertas e lista de compras | ⬜ não começou |
 | 3 | E6, E7, E8 — Fiscal | ⬜ bloqueado (certificado A1 e conta em homologação) |
-| 4 | E9 — Margem e CMV | ⬜ depende da Fase 2 ter dado real |
+| 4 | E9 — Margem e CMV | ⬜ depende de E4 gerar `SAIDA_VENDA` com dado real |
 
 ---
 
@@ -214,6 +216,39 @@ acontece uma vez por turno.
 Esconder no front é conveniência. **Quem barra é o servidor** — digitar a URL na mão sem ser
 dono só traz 403 da API.
 
+### 3.8 Estoque (E3)
+
+**O saldo não existe como coluna.** `insumo` guarda cadastro; quantidade é `SUM(quantidade)` de
+`movimento_estoque` (AD-03). Há teste que falha se alguém acrescentar uma coluna `saldo`,
+`quantidade` ou `estoque_atual` em `insumo`.
+
+O livro é append-only de verdade: um *trigger* no Postgres recusa `UPDATE` e `DELETE` na tabela.
+Correção é lançamento novo do tipo `AJUSTE`. O banco também garante, por `CHECK`:
+
+- o sinal por tipo — `ENTRADA` positiva; `SAIDA_VENDA`, `PERDA` e `DEVOLUCAO` negativas;
+  `AJUSTE` e `INVENTARIO` para os dois lados;
+- motivo obrigatório em `AJUSTE`, `PERDA` e `INVENTARIO` (RF-26);
+- `custo_medio_apos` preenchido **só** em `ENTRADA`.
+
+**Custo médio vigente** é o `custo_medio_apos` do último lançamento que mexeu na média. Leitura
+O(1), auditável (dá para ver a média depois de cada compra) e sem coluna mutável. Só `ENTRADA`
+recalcula: perda, ajuste e venda entram ao custo que já vigorava.
+
+**A conta em si** vive em `Servicos/CalculadoraEstoque.cs`, pura e testada, como
+`CalculadoraComanda`. Custo usa **4 casas** (`ArredondarCusto`), dinheiro continua com 2.
+
+**Registrar compra é uma transação só**: `compra`, `compra_item` e uma `ENTRADA` por item. O
+insumo é travado com `SELECT ... FOR UPDATE` antes de ler saldo e média — duas compras
+simultâneas do mesmo insumo leriam a mesma média e a segunda sairia errada.
+
+**Onde a Fase 2 continua:** `ComandaServico.Fechar` já abre um `EscopoTransacao`. A baixa de
+E4-02 entra **dentro dele**, passando o `escopo` para `EstoqueRepositorio.InserirMovimento` —
+assim falha na baixa desfaz o fechamento (AD-04). O tipo `SAIDA_VENDA` já existe e é recusado
+pela tela de estoque de propósito: ele só nasce do fechamento.
+
+Rotas: tudo sob `/api/estoque` é `[Authorize(Roles = DONO)]`. Tela em `paginas/Estoque.jsx`,
+rota `/estoque`.
+
 ---
 
 ## 4. Testes
@@ -224,13 +259,15 @@ dono só traz 403 da API.
 testes/MenuRestaurante.Testes/
 ├── InicializacaoDosTestes.cs        [ModuleInitializer] que liga o mapeamento do Dapper
 ├── CalculadoraComandaTestes.cs      aritmética de dinheiro, sem banco
+├── CalculadoraEstoqueTestes.cs      custo médio ponderado móvel, sem banco
 ├── PoliticaDeSenhaTestes.cs         regra de senha, sem banco
 └── Integracao/
     ├── BancoDeTeste.cs              banco descartável: cria, aplica migrações, apaga
     ├── FatoDeBancoAttribute.cs      [FatoDeBanco] — pula quando não há Postgres
     ├── MigracoesTestes.cs           E1-03, E1-04, E1-05
     ├── ConcorrenciaComandaTestes.cs E1-06
-    └── PapelDoUsuarioTestes.cs      E2-01, E2-02
+    ├── PapelDoUsuarioTestes.cs      E2-01, E2-02
+    └── EstoqueTestes.cs             E3-01, E3-02, E3-03
 ```
 
 ### Como os testes de integração acham o banco
@@ -265,7 +302,7 @@ mesmo com teste de corrida novo — teste que não falha quando o bug volta não
 
 1. **`dotnet test` verde sem Postgres não prova nada de banco.** Os testes de integração são
    *pulados*, não falhados, quando não há conexão. Confira a contagem: hoje o esperado é
-   **48 aprovados, 0 ignorados**.
+   **78 aprovados, 0 ignorados**.
 2. **Limite de 5 logins por minuto por IP.** Testando a API na mão com `curl`, uma sequência de
    tentativas começa a voltar 429. Espere a janela virar em vez de procurar bug de autenticação.
 3. **Nunca edite uma migração já aplicada.** O DbUp registra em `schemaversions` o que rodou e
@@ -287,26 +324,34 @@ mesmo com teste de corrida novo — teste que não falha quando o bug volta não
 
 ## 6. Próximo item
 
-**Fase 2, épico E3 — Cadastro de insumos e compras.** O detalhamento das histórias está em
-[`04-epicos-e-historias.md`](04-epicos-e-historias.md); as decisões que o código precisa
-respeitar estão em [`03-architecture-spine.md`](03-architecture-spine.md). Resumo do que já foi
-decidido e não deve ser re-discutido:
+**Fase 2, épico E4 — Ficha técnica e baixa automática.** O detalhamento está em
+[`04-epicos-e-historias.md`](04-epicos-e-historias.md); as decisões vinculantes estão em
+[`03-architecture-spine.md`](03-architecture-spine.md). O que já foi decidido e não deve ser
+re-discutido:
 
-- **Escopo:** Fase 2a cobre revenda (bebidas, congelados, charutos) e embalagens. Fase 2b faz
-  ficha técnica só dos 10 produtos mais vendidos. Ficha técnica de esfiha é trabalho de balança,
-  não de código.
-- **AD-03** — estoque é livro-razão *append-only*. `movimento_estoque` nunca tem UPDATE nem
-  DELETE, e não existe coluna de saldo: saldo é soma do livro. Duas fontes gravando saldo é
-  como se perde auditoria.
-- **AD-04** — a baixa acontece no fechamento da comanda, na **mesma transação**. Use o
-  `EscopoTransacao` de `ComandaServico.Fechar`, que já está lá.
-- **AD-05** — o custo médio vigente é congelado no próprio lançamento de saída. Não recalcule
-  depois: CMV histórico não pode mudar quando a ficha técnica muda.
-- **AD-06** — falta de estoque **alerta, não bloqueia** a venda. Cadastro desatualizado não pode
-  travar o caixa.
+- **Escopo:** Fase 2b faz ficha técnica só dos 10 produtos mais vendidos. Ficha técnica de
+  esfiha é trabalho de balança, não de código — não trave o épico esperando o cadastro completo.
+- **AD-04** — a baixa acontece no fechamento da comanda, na **mesma transação**.
+  `ComandaServico.Fechar` já abre um `EscopoTransacao`: passe esse `escopo` para
+  `EstoqueRepositorio.InserirMovimento`. Falha na baixa tem que desfazer o fechamento.
+- **AD-05** — grave o custo médio vigente no próprio `SAIDA_VENDA`. Não recalcule depois: CMV
+  histórico não pode mudar quando a ficha técnica muda. `EstoqueRepositorio.CustoMedioVigente`
+  já existe e aceita `escopo`.
+- **AD-06** — saldo negativo **não impede** o fechamento. Nunca lance
+  `RegraDeNegocioException` por falta de estoque.
+- **RF-11 já está pronto:** produto de revenda aponta para o insumo em `produto.insumo_id`.
+  Esses produtos baixam 1:1 e não precisam de ficha técnica.
+- **D-2 continua deferido:** ficha técnica variando por opção escolhida. Só decida isso depois
+  de ver se "Grande" e "Pequeno" mudam o custo o bastante para pagar o cadastro.
 
-Ordem sugerida: E3-01 (entidade `insumo`) → E3-02 (livro `movimento_estoque` com teste de saldo)
-→ E3-03 (fornecedor, compra e custo médio ponderado móvel) → E3-04 (tela, só `DONO`).
+Ordem sugerida: E4-01 (`ficha_tecnica_item` + editor no cardápio, seguindo
+`EditorOpcoesProduto.jsx` como modelo de UX) → E4-02 (baixa no fechamento, com os cinco testes
+que a história pede) → E4-03 (rastreabilidade nos dois sentidos: da comanda para os movimentos
+e do insumo para a origem — o extrato do insumo já mostra `comandaId`).
+
+Depois: E5 (inventário, perdas e lista de compras). `CalculadoraEstoque.QuantidadeSugerida` e a
+sinalização de "abaixo do mínimo" já estão prontas e aparecendo na tela — E5-03 é
+principalmente a exportação em PDF, reaproveitando `relatoriosPdf.js`.
 
 Duas regras de trabalho do plano que valem para tudo daqui pra frente:
 
